@@ -44,16 +44,16 @@
 
 ## 2. Danh sách Microservices
 
-| Service | Loại | Database | Mô tả |
-|---|---|---|---|
-| Identity Service | Web API | AWS Cognito | Xác thực, phân quyền JWT |
-| User Service | Web API | MySQL | Quản lý profile, địa chỉ người dùng (dùng Cognito `sub` làm id) |
-| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá |
-| Store & Inventory Service | Web API | ScyllaDB | Quản lý cửa hàng, tồn kho theo từng cửa hàng |
-| Order Service | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product |
-| Payment Service | Worker | - | Consume queue, xử lý thanh toán (mock) |
-| Notification Service | Worker | - | Consume queue, gửi email qua AWS SES |
-| Analytics Service | Worker | DynamoDB | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng |
+| Service                   | Loại    | Database      | Mô tả                                                           |
+| ---------------------------| ---------| ---------------| -----------------------------------------------------------------|
+| Identity Service          | Web API | AWS Cognito   | Xác thực, phân quyền JWT                                        |
+| User Service              | Web API | MySQL         | Quản lý profile, địa chỉ người dùng (dùng Cognito `sub` làm id) |
+| Product Service           | Web API | MySQL         | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá            |
+| Store & Inventory Service | Web API | ScyllaDB      | Quản lý cửa hàng, tồn kho theo từng cửa hàng                    |
+| Order Service             | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product |
+| Payment Service           | Worker  | -             | Consume queue, xử lý thanh toán (mock)                          |
+| Notification Service      | Worker  | -             | Consume queue, gửi email qua AWS SES                            |
+| Analytics Service         | Worker  | DynamoDB      | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng            |
 
 ---
 
