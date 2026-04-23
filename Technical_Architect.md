@@ -49,7 +49,7 @@
 |---|---|---|---|
 | Identity Service | Web API | AWS Cognito | Xác thực, phân quyền JWT |
 | User Service | Web API | MySQL | Quản lý profile, địa chỉ người dùng, store_staff (dùng Cognito `sub` làm id) |
-| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá, lịch sử giá |
+| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá (product level + variant level), lịch sử giá |
 | Store & Inventory Service | Web API | ScyllaDB | Quản lý cửa hàng, kho tổng, tồn kho theo từng cửa hàng, nhập hàng từ kho tổng |
 | Order Service | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product, auto-cancel |
 | Payment Service | Worker | - | Consume queue, xử lý thanh toán (mock) |
@@ -63,7 +63,7 @@
 | Database | Service sử dụng | Lý do |
 |---|---|---|
 | MySQL | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction |
-| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá, SKU, ảnh, variant) — write-through, cache miss gọi HTTP sang Product Service |
+| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá product, giá variant, SKU, ảnh, variant attributes) — write-through, cache miss gọi HTTP sang Product Service |
 | ScyllaDB | Store & Inventory Service | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời |
 | DynamoDB | Analytics Service | Event log, schema linh hoạt, không cần join phức tạp |
 
@@ -300,3 +300,22 @@ Infrastructure → Application → Domain
 
 Domain không phụ thuộc vào bất kỳ layer nào
 ```
+
+### 8.5 Base Entity & Soft Delete
+
+Tất cả entity kế thừa từ BaseEntity để đồng nhất toàn hệ thống:
+
+```csharp
+public abstract class BaseEntity
+{
+    public Guid Id { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+}
+```
+
+- Khi xóa: update `IsDeleted = true, DeletedAt = now()` (không xóa thật)
+- Sử dụng **EF Core Global Query Filter** để tự động lọc `WHERE is_deleted = false` cho mọi query
+- Áp dụng cho tất cả tables trong cả 3 MySQL services (User, Product, Order)
