@@ -60,24 +60,24 @@
 
 ## 3. Phân chia Database
 
-| Database | Service sử dụng | Lý do |
-|---|---|---|
-| MySQL | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction |
-| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá product, giá variant, SKU, ảnh, variant attributes) — write-through, cache miss gọi HTTP sang Product Service |
-| ScyllaDB | Store & Inventory Service | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời |
-| DynamoDB | Analytics Service | Event log, schema linh hoạt, không cần join phức tạp |
+| Database            | Service sử dụng                              | Lý do                                                                                                                                           |
+|---------------------|----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------aa|
+| MySQL               | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction                                                                                                        |
+| Redis (ElastiCache) | Order Service                                | Cache thông tin product (tên, giá product, giá variant, SKU, ảnh, variant attributes) — write-through, cache miss gọi HTTP sang Product Service |
+| ScyllaDB            | Store & Inventory Service                    | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời                                                                         |
+| DynamoDB            | Analytics Service                            | Event log, schema linh hoạt, không cần join phức tạp                                                                                            |
 
 ---
 
 ## 4. SQS Queues
 
-| Queue | Publisher | Consumer | Mô tả |
-|---|---|---|---|
-| order-confirmed-queue | Order Service | Payment Service | Kích hoạt xử lý thanh toán sau khi đơn được xác nhận |
-| payment-queue | Payment Service | Order Service, Notification Service | Kết quả thanh toán → cập nhật trạng thái đơn + gửi email |
-| order-status-queue | Order Service | Notification Service, Analytics Service | Mỗi lần trạng thái đơn thay đổi → gửi email + ghi analytics |
-| analytics-queue | Order Service | Analytics Service | Ghi nhận đơn POS và đơn online vào DynamoDB |
-| product-updated-queue | Product Service | Order Service | Product thay đổi → Order Service invalidate Redis cache |
+| Queue                 | Publisher       | Consumer                                | Mô tả                                                       |
+| -----------------------| -----------------| -----------------------------------------| -------------------------------------------------------------|
+| order-confirmed-queue | Order Service   | Payment Service                         | Kích hoạt xử lý thanh toán sau khi đơn được xác nhận        |
+| payment-queue         | Payment Service | Order Service, Notification Service     | Kết quả thanh toán → cập nhật trạng thái đơn + gửi email    |
+| order-status-queue    | Order Service   | Notification Service, Analytics Service | Mỗi lần trạng thái đơn thay đổi → gửi email + ghi analytics |
+| analytics-queue       | Order Service   | Analytics Service                       | Ghi nhận đơn POS và đơn online vào DynamoDB                 |
+| product-updated-queue | Product Service | Order Service                           | Product thay đổi → Order Service invalidate Redis cache     |
 
 ---
 
@@ -189,12 +189,12 @@ Trừ số lượng kho tổng + Cộng số lượng cửa hàng (atomic)
 
 ## 6. Phân quyền theo Role
 
-| Role | Quyền truy cập |
-|---|---|
-| Khách hàng | Xem sản phẩm, đặt hàng, xem lịch sử đơn hàng của mình |
-| Nhân viên cửa hàng | Xử lý đơn online, tạo đơn POS, cập nhật trạng thái đơn |
-| Cửa hàng trưởng | Toàn quyền cửa hàng + xem báo cáo cửa hàng mình + nhập hàng từ kho tổng |
-| Admin | Toàn quyền hệ thống + xem báo cáo toàn chuỗi + quản lý kho tổng |
+| Role               | Quyền truy cập                                                          |
+| --------------------| -------------------------------------------------------------------------|
+| Khách hàng         | Xem sản phẩm, đặt hàng, xem lịch sử đơn hàng của mình                   |
+| Nhân viên cửa hàng | Xử lý đơn online, tạo đơn POS, cập nhật trạng thái đơn                  |
+| Cửa hàng trưởng    | Toàn quyền cửa hàng + xem báo cáo cửa hàng mình + nhập hàng từ kho tổng |
+| Admin              | Toàn quyền hệ thống + xem báo cáo toàn chuỗi + quản lý kho tổng         |
 
 ---
 
