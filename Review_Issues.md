@@ -1,388 +1,365 @@
 # Review Issues — Hệ thống E-Commerce Microservice
 
-> Tài liệu tổng hợp các vấn đề cần xem lại và cải thiện, dựa trên review BA_Document.md, Technical_Architect.md và Database_Schema.md.
+> Tài liệu tổng hợp các vấn đề cần xem lại và cải thiện.
+>
+> Review lần 3: 23/04/2026 — Deep review toàn bộ BA_Document.md, Technical_Architect.md, Database_Schema.md.
 
 ---
 
 ## Mục lục
 
-1. [Vấn đề nghiêm trọng (Cần sửa trước khi implement)](#1-vấn-đề-nghiêm-trọng)
-2. [Vấn đề thiết kế (Nên cải thiện)](#2-vấn-đề-thiết-kế)
-3. [Thiếu sót trong tài liệu (Cần bổ sung)](#3-thiếu-sót-trong-tài-liệu)
-4. [Gợi ý cải thiện (Nice to have)](#4-gợi-ý-cải-thiện)
+1. [Mâu thuẫn giữa các tài liệu (Cần đồng bộ ngay)](#1-mâu-thuẫn-giữa-các-tài-liệu)
+2. [Vấn đề thiết kế mới phát hiện](#2-vấn-đề-thiết-kế-mới-phát-hiện)
+3. [Vấn đề thiết kế cũ còn tồn đọng](#3-vấn-đề-thiết-kế-cũ-còn-tồn-đọng)
+4. [Thiếu sót trong tài liệu](#4-thiếu-sót-trong-tài-liệu)
+5. [Gợi ý cải thiện (Nice to have)](#5-gợi-ý-cải-thiện)
+6. [Các vấn đề đã được sửa](#6-các-vấn-đề-đã-được-sửa)
 
 ---
 
-## 1. Vấn đề nghiêm trọng
+## 1. Mâu thuẫn giữa các tài liệu
 
-### 1.1 Cache strategy mâu thuẫn giữa BA và Technical Architect
+> BA_Document.md đã được cập nhật nhiều giải pháp mới, nhưng Technical_Architect.md chưa đồng bộ. Developer đọc 2 file sẽ thấy thông tin khác nhau.
 
-**Tài liệu liên quan:** BA_Document.md (mục 9), Technical_Architect.md (mục 5.5)
+### 1.1 ~~Cache strategy: BA ghi cache-aside, Technical Architect ghi write-through~~ ✅ ĐÃ SỬA
 
-**Mô tả:**
-- BA Document mô tả **write-through**: Product Service ghi MySQL + ghi Redis cùng lúc.
-- Đồng thời lại mô tả: Product Service publish SQS → Order Service **invalidate** cache.
-- Đây là 2 strategy khác nhau đang bị trộn lẫn.
+> Technical_Architect.md mục 3 + mục 5.5 đã đồng bộ sang cache-aside + SQS invalidation.
 
-**Tại sao là vấn đề:**
-- Write-through nghĩa là Product Service ghi trực tiếp vào Redis → data trong Redis luôn mới nhất → không cần invalidate.
-- Nếu cần invalidate qua SQS, đó là **cache-aside** pattern, không phải write-through.
-- Nếu triển khai cả 2 cùng lúc sẽ gây nhầm lẫn cho developer và có thể dẫn đến bug cache inconsistency.
+---
+
+### 1.2 ~~Luồng đặt hàng online: BA có Saga, Technical Architect vẫn luồng cũ~~ ✅ ĐÃ SỬA
+
+> Technical_Architect.md mục 5.1 đã đồng bộ sang Saga pattern: CREATED → trừ kho → PENDING/FAILED.
+
+---
+
+### 1.3 ~~Luồng nhập hàng: BA có Saga, Technical Architect vẫn ghi "atomic"~~ ✅ ĐÃ SỬA
+
+> Technical_Architect.md mục 5.6 đã đồng bộ sang Saga pattern với inventory_transactions làm source of truth.
+
+---
+
+### 1.4 ~~SQS Queues: BA bỏ analytics-queue, Technical Architect vẫn liệt kê~~ ✅ ĐÃ SỬA
+
+> Technical_Architect.md mục 1 (diagram), mục 4 (bảng), mục 5.3 (luồng POS) đã xóa analytics-queue. POS publish qua order-status-queue.
+
+---
+
+### 1.5 ~~BA mục 4 luồng đặt hàng chưa cập nhật status CREATED~~ ✅ ĐÃ SỬA
+
+> BA_Document.md mục 4 đã cập nhật luồng đặt hàng: CREATED → trừ kho → PENDING/FAILED → CONFIRMED → PREPARING → SHIPPING → DELIVERED.
+
+---
+
+### 1.6 ~~BA mục 3 vẫn ghi nhập hàng "atomic"~~ ✅ ĐÃ SỬA
+
+> BA_Document.md mục 3 đã sửa: bỏ "(atomic)", thêm reference đến Saga pattern ở mục 10.
+
+---
+
+## 2. Vấn đề thiết kế mới phát hiện
+
+### 2.1 ~~Giỏ hàng checkout nhiều variant nhưng chỉ chọn 1 cửa hàng~~ ✅ ĐÃ SỬA
+
+> BA_Document.md mục 3 đã bổ sung business rule **all-or-nothing**: chỉ cửa hàng có đủ tất cả variant trong giỏ mới được chọn. Không hỗ trợ partial order.
+
+---
+
+### 2.2 Thiếu validation khi thêm sản phẩm vào giỏ hàng
+
+**File:** BA_Document.md mục 3
+
+Khi khách thêm variant vào giỏ, tài liệu chưa define:
+- Có kiểm tra product status không? (SUSPENDED, OUT_OF_STOCK → có cho thêm vào giỏ?)
+- Có kiểm tra variant còn tồn kho ở bất kỳ cửa hàng nào không?
+- Nếu variant bị xóa (soft delete) sau khi đã nằm trong giỏ → xử lý thế nào?
+- Giới hạn quantity tối đa mỗi variant trong giỏ?
+
+**Hành động:**
+- [ ] Define validation rules khi add to cart
+- [ ] Define xử lý khi variant trong giỏ bị thay đổi/xóa
+
+---
+
+### 2.3 ~~Hoàn hàng thiếu business rules quan trọng~~ ✅ ĐÃ SỬA
+
+> BA_Document.md mục 4 đã bổ sung đầy đủ:
+> - Thời hạn hoàn: 2 ngày sau DELIVERED
+> - Chỉ hoàn toàn bộ, không partial return
+> - Chỉ đơn ONLINE, không áp dụng POS
+> - Hoàn tiền thủ công bởi nhân viên
+> - Yêu cầu hoàn không tự động hủy
+> - Khách cần cung cấp lý do hoàn hàng
+>
+> Database_Schema.md đã thêm `return_reason`, `return_requested_at` vào orders table + return validation rules.
+
+---
+
+### 2.4 Thiếu `level` hoặc `depth` column trong bảng categories
+
+**File:** Database_Schema.md (Product Service — categories)
+
+Bảng `categories` có `path` (materialized path) nhưng thiếu `level`/`depth`. Khi cần:
+- Query tất cả danh mục cấp 1 (root) → phải dùng `WHERE parent_id IS NULL` (OK)
+- Query tất cả danh mục cấp 2 → phải parse path hoặc join, không có cách query trực tiếp
+- Validate sản phẩm chỉ gắn vào danh mục cấp lá → cần biết danh mục nào là lá
+
+**Gợi ý:** Thêm column `level INT NOT NULL` (0 = root, 1 = cấp 2, ...) hoặc `is_leaf BOOLEAN`.
+
+**Hành động:**
+- [ ] Cân nhắc thêm `level` hoặc `is_leaf` vào bảng categories
+
+---
+
+### 2.5 Materialized path dùng UUID sẽ rất dài
+
+**File:** Database_Schema.md (Product Service — categories)
+
+Path ví dụ: `/1/2/3` nhưng thực tế ID là UUID (36 ký tự). Với 5 cấp:
+```
+/550e8400-e29b-41d4-a716-446655440000/6ba7b810-9dad-11d1-80b4-00c04fd430c8/...
+```
+→ Dễ vượt `VARCHAR(500)`, và `LIKE` query trên chuỗi dài sẽ chậm.
 
 **Gợi ý:**
-Chọn 1 trong 2 approach:
+- Dùng integer auto-increment ID riêng cho categories (không dùng UUID cho path)
+- Hoặc dùng short code thay vì UUID trong path
 
-| Approach | Ưu điểm | Nhược điểm |
+**Hành động:**
+- [ ] Xem lại chiến lược materialized path với UUID
+
+---
+
+### 2.6 ScyllaDB stores table dùng full scan để lấy tất cả cửa hàng
+
+**File:** Database_Schema.md (Store & Inventory Service — stores)
+
+Ghi chú: *"Lấy tất cả cửa hàng: full scan (số lượng ít, chấp nhận được)"*
+
+Đúng là chấp nhận được khi ít cửa hàng, nhưng:
+- Full scan trong ScyllaDB là **anti-pattern** — nó query tất cả partition trên tất cả node
+- Nếu sau này mở rộng ra nhiều thành phố, số cửa hàng tăng → vẫn full scan?
+- Không có cách filter theo `city` hay `is_active` hiệu quả
+
+**Gợi ý:** Thêm bảng `stores_by_city` nếu cần query theo thành phố, hoặc cache danh sách stores trong Redis (vì data ít thay đổi).
+
+**Hành động:**
+- [ ] Cân nhắc cache stores trong Redis hoặc thêm bảng query-optimized
+
+---
+
+### 2.7 Thiếu xử lý khi khách hủy đơn chủ động
+
+**File:** BA_Document.md mục 4, Database_Schema.md (orders state machine)
+
+State machine cho phép `PENDING → CANCELLED` và `CONFIRMED → CANCELLED`, nhưng tài liệu chỉ đề cập **auto-cancel** (quá hạn). Chưa define:
+- Khách có thể **chủ động hủy** đơn không? Ở trạng thái nào?
+- Cửa hàng có thể hủy đơn không? (hết hàng thực tế, sản phẩm lỗi...)
+- Khi khách/cửa hàng hủy → luồng hoàn trả inventory giống auto-cancel?
+- Cần lưu `cancelled_by` (user/staff/system) và `cancel_reason`?
+
+**Hành động:**
+- [ ] Define rõ ai được hủy đơn, ở trạng thái nào
+- [ ] Cân nhắc thêm `cancelled_by` và `cancel_reason` vào orders table
+
+---
+
+### 2.8 SQS message schema chưa được define
+
+**File:** Technical_Architect.md mục 4
+
+Có 4 queue nhưng chưa define message format cho bất kỳ queue nào. Developer implement publisher và consumer cần biết:
+- Message body chứa những field gì?
+- Format: JSON? Có version field không?
+- Có correlation ID để trace không?
+
+**Gợi ý:** Define message schema cho ít nhất `order-status-queue` (queue quan trọng nhất, có 3 consumer).
+
+**Hành động:**
+- [ ] Define message schema cho từng SQS queue
+
+---
+
+### 2.9 ~~`order_events` trong DynamoDB có thể bị duplicate~~ ✅ ĐÃ SỬA
+
+> Database_Schema.md Analytics section đã cập nhật:
+> - Chỉ aggregate khi status = `DELIVERED`, reverse aggregate khi `RETURN_COMPLETED`
+> - SK thêm `#{status}` để phân biệt event cùng order
+> - Dùng DynamoDB conditional write (attribute_not_exists) để dedup
+
+---
+
+### 2.10 Thiếu pagination cho inventory_by_store
+
+**File:** Database_Schema.md (Store & Inventory Service)
+
+Query `WHERE store_id = ?` trên `inventory_by_store` trả về **tất cả variant** tại 1 cửa hàng. Nếu cửa hàng có hàng nghìn variant → response rất lớn.
+
+ScyllaDB hỗ trợ paging qua driver, nhưng tài liệu chưa đề cập pagination strategy cho các query trả về nhiều row.
+
+**Hành động:**
+- [ ] Document pagination strategy cho ScyllaDB queries
+
+---
+
+## 3. Vấn đề thiết kế cũ còn tồn đọng
+
+### 3.1 Bảng `payments` vi phạm database-per-service
+
+**Trạng thái:** BA mục 10 ghi nhận là "Technical Debt có kế hoạch".
+
+**Còn lại:** Technical_Architect.md mục 2 ghi Payment Service database = `-` mà không có note.
+
+**Hành động:**
+- [ ] Thêm note vào Technical_Architect.md mục 2
+
+---
+
+### 3.2 Retry policy chưa chi tiết
+
+**Trạng thái:** BA mục 10 có DLQ maxReceiveCount: 3, nhưng chưa có:
+- Exponential backoff config (initial delay, max delay)
+- Poison message handling
+- DLQ monitoring/alarm
+
+**Hành động:**
+- [ ] Bổ sung retry policy chi tiết
+
+---
+
+## 4. Thiếu sót trong tài liệu
+
+### 4.1 Thiếu observability strategy
+
+Không có tài liệu nào đề cập distributed tracing, centralized logging, metrics, health check.
+
+**Hành động:**
+- [ ] Thêm mục "Observability" vào Technical_Architect.md (OpenTelemetry + X-Ray, CloudWatch Logs, health check endpoints, k8s probes)
+
+---
+
+### 4.2 Thiếu security concerns ngoài JWT
+
+Chưa document: rate limiting, CORS, input validation, secrets management, k8s network policy, data encryption.
+
+**Hành động:**
+- [ ] Thêm mục "Security" vào Technical_Architect.md
+
+---
+
+### 4.3 Thiếu data migration và seeding strategy
+
+Chưa document: EF Core Migrations, CQL scripts, seed data, rollback strategy, migration order khi deploy nhiều service.
+
+**Hành động:**
+- [ ] Thêm mục "Data Migration" vào Technical_Architect.md
+
+---
+
+### 4.4 Thiếu Docker Compose / local development setup
+
+**File:** BA_Document.md (Tech stack ghi Docker + Docker Compose)
+
+Tech stack liệt kê Docker Compose nhưng không có tài liệu nào mô tả:
+- Làm sao chạy toàn bộ hệ thống locally?
+- Docker Compose file cần những service gì? (MySQL, ScyllaDB, Redis, LocalStack cho SQS/SES/S3/Cognito/DynamoDB)
+- Environment variables cho local vs production
+
+**Hành động:**
+- [ ] Tạo docker-compose.yml hoặc document local development setup
+
+---
+
+### 4.5 Thiếu testing strategy
+
+Không có tài liệu nào đề cập:
+- Unit test, integration test, e2e test cho từng service
+- Test strategy cho async flows (SQS message processing)
+- Test strategy cho cross-service flows (đặt hàng = Order + Inventory + Payment)
+- Contract testing giữa các service
+
+**Hành động:**
+- [ ] Document testing strategy
+
+---
+
+## 5. Gợi ý cải thiện (Nice to have)
+
+### 5.1 Thêm monthly aggregation cho Analytics
+
+Query 30 ngày rồi sum ở application layer sẽ chậm khi data lớn. Cân nhắc thêm `monthly_product_stats` / `monthly_category_stats`.
+
+---
+
+### 5.2 Cân nhắc Redis cho giỏ hàng thay vì MySQL
+
+Giỏ hàng là data tạm thời, read/write thường xuyên. Redis sẽ nhanh hơn. Trade-off: mất data khi restart.
+
+---
+
+### 5.3 Bổ sung Notification Service database
+
+Không có DB → không lưu lịch sử email, không retry được email fail, không có notification preferences.
+
+---
+
+### 5.4 Cân nhắc tách/gộp Identity Service
+
+Nếu Identity Service chỉ wrap Cognito → có thể gộp vào Envoy Gateway + User Service.
+
+---
+
+### 5.5 Thêm `order_number` human-readable cho orders
+
+Orders hiện chỉ có UUID làm ID. Khách hàng và nhân viên cần mã đơn hàng dễ đọc (ví dụ: `ORD-20250423-0001`). Cân nhắc thêm column `order_number VARCHAR(20) UNIQUE`.
+
+---
+
+### 5.6 Cân nhắc search engine cho sản phẩm
+
+BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* nhưng chỉ dùng MySQL. Khi sản phẩm nhiều, full-text search trên MySQL sẽ chậm và thiếu tính năng (fuzzy search, tiếng Việt không dấu). Cân nhắc Elasticsearch/OpenSearch cho product search.
+
+---
+
+## 6. Các vấn đề đã được sửa (từ review lần 1-2)
+
+| # | Vấn đề | Sửa ở đâu |
 |---|---|---|
-| **Cache-aside + SQS invalidation** (khuyến nghị) | Product Service không cần biết Redis của Order Service, đúng nguyên tắc service independence | Có khoảng thời gian cache stale (eventual consistency) |
-| **Write-through** | Data luôn mới nhất trong cache | Product Service phải biết và ghi vào Redis của Order Service → coupling giữa 2 service |
+| ✅ | Cache strategy mâu thuẫn | BA mục 9 → cache-aside |
+| ✅ | ScyllaDB không có transaction | BA mục 10 → Saga pattern |
+| ✅ | Race condition đặt hàng | BA mục 10 → Saga (CREATED/FAILED), DB Schema cập nhật |
+| ✅ | Concurrent inventory overselling | BA mục 10 → conditional update CQL |
+| ✅ | Auto-cancel thiếu idempotency | BA mục 10 → optimistic locking + outbox |
+| ✅ | analytics-queue gộp | DB Schema Analytics → dùng order-status-queue |
+| ✅ | Order status state machine | BA mục 10 + DB Schema → có diagram |
+| ✅ | price_history thiếu soft delete | DB Schema → ghi rõ append-only exception |
+| ✅ | Thiếu sync service calls | BA mục 10 → có bảng sync calls |
+| ✅ | Thiếu DLQ | BA mục 10 → maxReceiveCount: 3 |
+| ✅ | Thiếu API versioning | BA mục 10 → URL versioning /api/v1/ |
+| ✅ | POS offline | BA mục 10 → yêu cầu internet, offline out of scope |
 
 ---
 
-### 1.2 ScyllaDB không hỗ trợ cross-partition transaction
+## Tổng kết
 
-**Tài liệu liên quan:** BA_Document.md (mục 3), Database_Schema.md (Store & Inventory Service)
+| Mức độ | Tổng | Hành động |
+|---|---|---|
+| **Mâu thuẫn tài liệu** | 6 | ✅ Đã sửa 6/6 |
+| **Thiết kế mới** | 10 | Review và quyết định từng issue |
+| **Thiết kế cũ tồn đọng** | 2 | Bổ sung note + chi tiết |
+| **Thiếu sót tài liệu** | 5 | Bổ sung vào Technical_Architect.md |
+| **Gợi ý cải thiện** | 6 | Nice to have, làm sau |
 
-**Mô tả:**
-Luồng nhập hàng từ kho tổng vào cửa hàng yêu cầu **atomic**, nhưng thực tế cần cập nhật:
-1. `inventory_by_store` cho kho tổng (quantity -= N)
-2. `inventory_by_variant` cho kho tổng (quantity -= N)
-3. `inventory_by_store` cho cửa hàng (quantity += N)
-4. `inventory_by_variant` cho cửa hàng (quantity += N)
-5. `inventory_transactions` cho kho tổng (TRANSFER_OUT)
-6. `inventory_transactions` cho cửa hàng (TRANSFER_IN)
+### Ưu tiên cao nhất
 
-ScyllaDB **không có multi-partition transaction**. Nếu bước 3 fail sau khi bước 1-2 đã thành công, kho tổng bị trừ nhưng cửa hàng không được cộng → mất hàng.
-
-**Gợi ý:**
-
-**Option A — Saga pattern với idempotent operations:**
-```
-1. Ghi inventory_transactions (TRANSFER_OUT + TRANSFER_IN) làm source of truth
-2. Cập nhật inventory_by_store + inventory_by_variant cho kho tổng
-3. Cập nhật inventory_by_store + inventory_by_variant cho cửa hàng
-4. Nếu bước nào fail → retry dựa trên transaction log
-```
-
-**Option B — Lightweight Transaction (LWT) cho từng bước:**
-```cql
-UPDATE inventory_by_store 
-SET quantity = quantity - N 
-WHERE store_id = ? AND product_variant_id = ?
-IF quantity >= N;
-```
-Kết hợp với compensation logic khi bước sau fail.
+1. ~~**Đồng bộ Technical_Architect.md** (mục 1.1 → 1.4)~~ ✅ ĐÃ SỬA
+2. ~~**Sửa mâu thuẫn nội bộ BA** (mục 1.5, 1.6)~~ ✅ ĐÃ SỬA
+3. ~~**Define analytics aggregation trigger** (mục 2.9)~~ ✅ ĐÃ SỬA
+4. ~~**Define checkout khi thiếu hàng** (mục 2.1)~~ ✅ ĐÃ SỬA
+5. ~~**Define hoàn hàng business rules** (mục 2.3)~~ ✅ ĐÃ SỬA
 
 ---
 
-### 1.3 Race condition trong luồng đặt hàng online
-
-**Tài liệu liên quan:** Technical_Architect.md (mục 5.1)
-
-**Mô tả:**
-Luồng hiện tại:
-```
-[Store & Inventory Service] Trừ tồn kho tạm thời
-        ↓
-[Order Service] Tạo đơn hàng
-```
-
-Nếu bước tạo đơn hàng fail (network error, Order Service down, DB timeout...) sau khi inventory đã bị trừ → inventory bị trừ mà không có đơn hàng tương ứng.
-
-**Gợi ý:**
-
-**Option A — Saga pattern:**
-```
-1. Order Service tạo đơn hàng status = CREATED (chưa trừ kho)
-2. Gọi Store & Inventory Service trừ kho
-3. Nếu trừ kho thành công → update status = PENDING
-4. Nếu trừ kho fail → update status = FAILED
-5. Nếu bước 3 fail (network) → background job reconcile
-```
-
-**Option B — Reservation pattern:**
-```
-1. Store & Inventory tạo reservation (reserved_quantity, expires in 5 phút)
-2. Order Service tạo đơn hàng với reservation_id
-3. Confirm reservation → trừ kho thật
-4. Reservation hết hạn → tự động hoàn trả
-```
-
----
-
-### 1.4 Concurrent inventory deduction gây overselling
-
-**Tài liệu liên quan:** Database_Schema.md (Store & Inventory Service)
-
-**Mô tả:**
-Khi nhiều khách cùng mua 1 variant tại 1 cửa hàng đồng thời, nếu không có cơ chế kiểm soát concurrency:
-- Tồn kho còn 1, 2 khách cùng đọc quantity = 1 → cả 2 đều đặt hàng thành công → overselling.
-
-Tài liệu chưa đề cập cách xử lý concurrent inventory deduction.
-
-**Gợi ý:**
-Dùng ScyllaDB **Lightweight Transaction (LWT)** hoặc **Compare-and-Set**:
-```cql
-UPDATE inventory_by_store 
-SET quantity = ? 
-WHERE store_id = ? AND product_variant_id = ?
-IF quantity = ?;  -- optimistic locking
-```
-
-Hoặc dùng conditional update:
-```cql
-UPDATE inventory_by_store 
-SET quantity = quantity - ? 
-WHERE store_id = ? AND product_variant_id = ?
-IF quantity >= ?;
-```
-
-**Lưu ý:** LWT trong ScyllaDB có performance overhead (~4x slower). Nếu throughput cao, cân nhắc dùng Redis distributed lock phía trước ScyllaDB.
-
----
-
-## 2. Vấn đề thiết kế
-
-### 2.1 Bảng `payments` vi phạm database-per-service
-
-**Tài liệu liên quan:** Database_Schema.md (Order Service), Technical_Architect.md (mục 2)
-
-**Mô tả:**
-- Bảng `payments` nằm trong database của **Order Service**.
-- Payment Service được liệt kê là service riêng (Worker) nhưng **không có database**.
-- Khi tích hợp payment gateway thật (VNPay, MoMo, Stripe), Payment Service sẽ cần lưu: transaction ID từ gateway, retry history, refund records, webhook logs...
-
-**Gợi ý:**
-- Di chuyển bảng `payments` sang Payment Service với database riêng (MySQL hoặc PostgreSQL).
-- Order Service chỉ lưu `payment_status` và `payment_id` (reference).
-- Payment Service publish event qua SQS khi payment status thay đổi → Order Service consume và cập nhật.
-
----
-
-### 2.2 Auto-cancel thiếu idempotency và race condition protection
-
-**Tài liệu liên quan:** Technical_Architect.md (mục 5.2)
-
-**Mô tả:**
-Background job auto-cancel đơn PENDING quá hạn có các rủi ro:
-1. Đơn hàng được confirm **đúng lúc** background job đang chạy → cancel đơn đã confirmed.
-2. Job chạy 2 lần (retry, duplicate) → hoàn trả inventory 2 lần.
-3. Hoàn trả inventory fail → đơn bị cancel nhưng inventory không được hoàn.
-
-**Gợi ý:**
-```sql
--- Optimistic locking: chỉ cancel nếu status vẫn là PENDING
-UPDATE orders 
-SET status = 'CANCELLED', updated_at = NOW() 
-WHERE id = ? AND status = 'PENDING' AND expires_at < NOW();
--- Kiểm tra affected rows > 0 trước khi hoàn trả inventory
-```
-
-Kết hợp:
-- Lưu `cancellation_id` (UUID) vào order để đảm bảo idempotent inventory restoration.
-- Dùng **outbox pattern**: ghi cancel event vào outbox table trong cùng transaction với update order → background job publish event → inventory service consume và hoàn trả.
-
----
-
-### 2.3 `order-confirmed-queue` và `analytics-queue` có thể gộp
-
-**Tài liệu liên quan:** Technical_Architect.md (mục 4)
-
-**Mô tả:**
-- `order-status-queue` đã publish mỗi khi trạng thái đơn thay đổi → Analytics Service consume.
-- `analytics-queue` riêng cho đơn POS.
-- Có thể gộp bằng cách cho đơn POS cũng publish qua `order-status-queue` với status = DELIVERED (vì POS hoàn thành ngay).
-
-**Lợi ích:** Giảm số queue cần quản lý, Analytics Service chỉ cần consume 1 queue.
-
----
-
-### 2.4 Thiếu order status transition validation
-
-**Tài liệu liên quan:** BA_Document.md (mục 4), Database_Schema.md (orders table)
-
-**Mô tả:**
-Order status có 10 giá trị nhưng tài liệu chưa define rõ **state machine** — trạng thái nào được phép chuyển sang trạng thái nào.
-
-Ví dụ các transition không hợp lệ cần ngăn chặn:
-- `DELIVERED` → `PENDING` (quay ngược)
-- `CANCELLED` → `PREPARING` (đơn đã hủy không thể xử lý tiếp)
-- `SHIPPING` → `RETURN_COMPLETED` (bỏ qua các bước hoàn hàng)
-
-**Gợi ý:**
-Bổ sung state machine diagram:
-```
-PENDING → CONFIRMED → PREPARING → SHIPPING → DELIVERED
-PENDING → CANCELLED
-DELIVERED → RETURN_REQUESTED → RETURN_PICKING → RETURN_SHIPPING → RETURN_COMPLETED
-```
-
-Implement validation trong Order Service domain layer:
-```csharp
-public static readonly Dictionary<OrderStatus, OrderStatus[]> AllowedTransitions = new()
-{
-    { OrderStatus.PENDING, new[] { OrderStatus.CONFIRMED, OrderStatus.CANCELLED } },
-    { OrderStatus.CONFIRMED, new[] { OrderStatus.PREPARING, OrderStatus.CANCELLED } },
-    { OrderStatus.PREPARING, new[] { OrderStatus.SHIPPING } },
-    { OrderStatus.SHIPPING, new[] { OrderStatus.DELIVERED } },
-    { OrderStatus.DELIVERED, new[] { OrderStatus.RETURN_REQUESTED } },
-    // ... return flow
-};
-```
-
----
-
-### 2.5 `price_history` thiếu soft delete fields nhưng các bảng khác đều có
-
-**Tài liệu liên quan:** Database_Schema.md (Product Service)
-
-**Mô tả:**
-Bảng `price_history` không có `is_deleted`, `deleted_at`, `updated_at` trong khi BA Document quy định "mọi entity đều có `created_at`, `updated_at`, `is_deleted`, `deleted_at`".
-
-**Gợi ý:**
-- Nếu `price_history` là append-only log (không bao giờ xóa/sửa) → document rõ đây là exception, không cần soft delete.
-- Nếu muốn đồng nhất → thêm các fields theo quy tắc chung.
-
----
-
-## 3. Thiếu sót trong tài liệu
-
-### 3.1 Thiếu document synchronous service-to-service calls
-
-**Mô tả:**
-Tài liệu chỉ document async communication qua SQS. Các HTTP call đồng bộ giữa services chưa được liệt kê rõ.
-
-**Các sync call cần document:**
-
-| Caller | Callee | Mục đích | Khi nào |
-|---|---|---|---|
-| Order Service | Store & Inventory Service | Kiểm tra + trừ tồn kho | Khi tạo đơn hàng |
-| Order Service | Product Service | Lấy thông tin product (cache miss) | Khi Redis cache miss |
-| Order Service | User Service | Lấy thông tin user/address | Khi tạo đơn hàng online |
-| Order Service | Store & Inventory Service | Hoàn trả tồn kho | Khi cancel/return đơn |
-
-**Tại sao quan trọng:**
-- Sync call tạo runtime dependency → nếu callee down, caller cũng fail.
-- Cần plan cho **circuit breaker**, **timeout**, **retry** cho từng call.
-- Ảnh hưởng đến deployment order và health check.
-
----
-
-### 3.2 Thiếu error handling và retry strategy
-
-**Mô tả:**
-Tài liệu chưa đề cập:
-- **Dead Letter Queue (DLQ)** cho SQS: message xử lý thất bại sau N lần retry sẽ đi đâu?
-- **Retry policy**: exponential backoff? max retries?
-- **Poison message handling**: message format sai, data không hợp lệ.
-- **Circuit breaker**: khi downstream service không phản hồi.
-
-**Gợi ý bổ sung:**
-```
-Mỗi SQS queue cần có:
-├── Main queue (visibility timeout: 30s)
-├── DLQ (maxReceiveCount: 3)
-└── Alarm khi DLQ có message
-```
-
----
-
-### 3.3 Thiếu observability strategy
-
-**Mô tả:**
-Hệ thống microservice cần:
-- **Distributed tracing**: theo dõi 1 request đi qua nhiều service (OpenTelemetry + Jaeger/X-Ray).
-- **Centralized logging**: aggregate logs từ tất cả services (ELK Stack hoặc CloudWatch).
-- **Metrics & alerting**: request rate, error rate, latency per service (Prometheus + Grafana hoặc CloudWatch).
-- **Health check endpoints**: `/health` cho mỗi service, k8s liveness/readiness probes.
-
----
-
-### 3.4 Thiếu API versioning strategy
-
-**Mô tả:**
-Khi hệ thống phát triển, API sẽ thay đổi. Cần quy ước:
-- URL versioning (`/api/v1/products`) hay header versioning?
-- Backward compatibility policy: hỗ trợ bao nhiêu version cũ?
-- Deprecation process.
-
----
-
-### 3.5 Thiếu security concerns ngoài JWT
-
-**Mô tả:**
-Ngoài JWT validation ở API Gateway, cần bổ sung:
-- **Rate limiting** per user/IP tại Envoy Gateway.
-- **Input validation** cho tất cả API endpoints.
-- **SQL injection protection** (EF Core parameterized queries đã handle, nhưng cần document).
-- **CORS policy** cho Vue 3 frontend.
-- **Secrets management**: connection strings, API keys lưu ở đâu? (AWS Secrets Manager / k8s Secrets).
-- **Network policy** trong k8s: service nào được gọi service nào.
-
----
-
-### 3.6 Thiếu data migration và seeding strategy
-
-**Mô tả:**
-- Làm sao migrate schema khi deploy version mới? (EF Core Migrations cho MySQL, CQL scripts cho ScyllaDB)
-- Seed data ban đầu: categories, stores, warehouse, admin account.
-- Rollback strategy khi migration fail.
-
----
-
-## 4. Gợi ý cải thiện
-
-### 4.1 Thêm monthly aggregation cho Analytics
-
-**Vấn đề:** Query 30 ngày rồi sum ở application layer sẽ chậm khi data lớn.
-
-**Gợi ý:** Thêm bảng `monthly_product_stats` và `monthly_category_stats` trong DynamoDB, được aggregate bởi scheduled job chạy hàng đêm hoặc cuối tháng.
-
----
-
-### 4.2 Cân nhắc dùng Redis cho giỏ hàng thay vì MySQL
-
-**Vấn đề:** Giỏ hàng là data tạm thời, thay đổi thường xuyên, không cần ACID transaction phức tạp.
-
-**Gợi ý:**
-- Lưu cart trong Redis (hash hoặc JSON) → read/write nhanh hơn MySQL.
-- Set TTL cho cart (ví dụ 30 ngày không hoạt động → tự xóa).
-- Giảm load cho MySQL Order Service database.
-
-**Trade-off:** Mất cart nếu Redis restart (có thể chấp nhận được, hoặc dùng Redis persistence).
-
----
-
-### 4.3 Bổ sung Notification Service database
-
-**Vấn đề:** Notification Service không có database → không lưu lịch sử gửi email, không biết email nào đã gửi thành công/thất bại.
-
-**Gợi ý:** Thêm database nhẹ (DynamoDB hoặc MySQL) để lưu:
-- Notification history (email sent, status, retry count)
-- User notification preferences (opt-out)
-- Template management
-
----
-
-### 4.4 Cân nhắc tách Identity Service và User Service
-
-**Vấn đề:** Identity Service chỉ wrap AWS Cognito. Nếu chỉ validate JWT ở Envoy Gateway thì Identity Service có thể không cần là 1 service riêng.
-
-**Gợi ý:**
-- Nếu Identity Service chỉ forward request đến Cognito → gộp logic vào Envoy Gateway (JWT validation) + User Service (profile management).
-- Nếu Identity Service có business logic riêng (custom auth flow, token refresh, session management) → giữ nguyên.
-
----
-
-### 4.5 Document rõ POS flow khi mất kết nối
-
-**Vấn đề:** POS chạy trên web, nếu mất internet thì nhân viên không thể bán hàng.
-
-**Gợi ý:** Cân nhắc:
-- Offline mode cho POS (Service Worker + IndexedDB)?
-- Hay chấp nhận POS phải có internet (đơn giản hơn)?
-- Document rõ quyết định này.
-
----
-
-*Tài liệu này được tạo dựa trên review ngày 23/04/2026. Cần được cập nhật khi các vấn đề được giải quyết.*
+*Review lần 1: 23/04/2026*
+*Cross-check lần 2: 23/04/2026*
+*Deep review lần 3: 23/04/2026*

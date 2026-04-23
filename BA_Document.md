@@ -81,17 +81,21 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 - Nhiều cửa hàng trong cùng một thành phố, mỗi cửa hàng có tồn kho riêng
 - Một **kho tổng** duy nhất cho toàn chuỗi, được coi là **1 cửa hàng đặc biệt** với type = `WAREHOUSE`
 - Tồn kho lưu theo dạng: **số lượng còn lại của từng cửa hàng** + **số lượng còn lại của kho tổng**
-- Có nghiệp vụ **nhập hàng từ kho tổng vào cửa hàng**: số lượng kho tổng giảm, số lượng cửa hàng tăng tương ứng (atomic)
+- Có nghiệp vụ **nhập hàng từ kho tổng vào cửa hàng**: số lượng kho tổng giảm, số lượng cửa hàng tăng tương ứng (dùng **Saga pattern** — xem mục 10)
 
 ### Luồng mua hàng online của khách:
 
 1. Khách chọn sản phẩm và variant muốn mua
 2. Khách thêm vào **giỏ hàng** (giỏ hàng gắn với tài khoản, chưa gắn cửa hàng)
-3. Khi chuẩn bị thanh toán, hệ thống hiển thị **danh sách cửa hàng** kèm **số lượng tồn kho còn lại** của từng cửa hàng
-   - Cửa hàng gần nhất với địa chỉ khách được **gợi ý ưu tiên** lên đầu
-   - Cửa hàng hết hàng vẫn hiển thị nhưng bị **disable**, không thể chọn
+3. Khi chuẩn bị thanh toán, hệ thống hiển thị **danh sách cửa hàng**:
+   - Chỉ cửa hàng có **đủ tất cả variant** trong giỏ hàng (đúng số lượng) mới được **enable** để chọn (**all-or-nothing**)
+   - Cửa hàng thiếu bất kỳ variant nào hoặc không đủ số lượng → hiển thị nhưng bị **disable**, kèm thông tin variant nào thiếu
+   - Cửa hàng gần nhất với địa chỉ khách được **gợi ý ưu tiên** lên đầu (trong số các cửa hàng đủ hàng)
+   - Nếu **không có cửa hàng nào** đủ tất cả variant → hiển thị thông báo, gợi ý khách bớt sản phẩm trong giỏ
 4. Khách **chọn cửa hàng** và **địa chỉ giao hàng** → xác nhận đặt hàng
 5. Đơn hàng được gắn với cửa hàng đã chọn, tồn kho trừ tạm thời tại cửa hàng đó
+
+> **Lưu ý:** Không hỗ trợ partial order (đặt 1 phần giỏ hàng). Khách phải chọn cửa hàng có đủ tất cả variant hoặc tự điều chỉnh giỏ hàng.
 
 ### Giỏ hàng:
 - Gắn với **tài khoản người dùng**, không gắn cửa hàng
@@ -104,26 +108,47 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 ### Luồng đặt hàng bình thường:
 
 ```
-Chờ xác nhận (cả khách hàng và cửa hàng xác nhận trong vòng 1 ngày, quá hạn tự động hủy)
+Tạo đơn hàng (CREATED)
         ↓
-Đang chuẩn bị hàng
+Trừ tồn kho tạm thời tại cửa hàng
+  - Thành công → chuyển sang Chờ xác nhận (PENDING)
+  - Thất bại  → đơn hàng FAILED
         ↓
-Đang vận chuyển
+Chờ xác nhận (PENDING) — quá 1 ngày tự động hủy (CANCELLED)
         ↓
-Đã giao hàng thành công
+Xác nhận thanh toán (CONFIRMED)
+        ↓
+Đang chuẩn bị hàng (PREPARING)
+        ↓
+Đang vận chuyển (SHIPPING)
+        ↓
+Đã giao hàng thành công (DELIVERED)
 ```
 
 ### Luồng hoàn hàng:
 
 ```
-Yêu cầu hoàn hàng
+Yêu cầu hoàn hàng (RETURN_REQUESTED)
         ↓
-Đang chờ lấy hàng từ khách
+Đang chờ lấy hàng từ khách (RETURN_PICKING)
         ↓
-Đang vận chuyển hoàn về shop
+Đang vận chuyển hoàn về shop (RETURN_SHIPPING)
         ↓
-Người bán xác nhận đã nhận hàng hoàn
+Người bán xác nhận đã nhận hàng hoàn (RETURN_COMPLETED)
+        ↓
+Nhân viên xử lý hoàn tiền thủ công
 ```
+
+### Business rules hoàn hàng:
+- Khách chỉ được yêu cầu hoàn hàng trong vòng **2 ngày** kể từ khi đơn hàng DELIVERED. Quá 2 ngày → không cho phép tạo yêu cầu hoàn
+- Chỉ hỗ trợ **hoàn toàn bộ đơn hàng**, không hỗ trợ hoàn từng sản phẩm riêng lẻ (partial return)
+- Chỉ đơn hàng **ONLINE** mới được hoàn hàng. Đơn **POS** không hỗ trợ hoàn qua hệ thống
+- Yêu cầu hoàn hàng **không tự động hủy** — sẽ giữ nguyên trạng thái cho đến khi nhân viên xử lý
+- Khi RETURN_COMPLETED:
+  - Tồn kho được **hoàn trả** về cửa hàng đã xử lý đơn
+  - Nhân viên **hoàn tiền thủ công** cho khách (chuyển khoản hoặc tiền mặt tùy thỏa thuận)
+  - Giai đoạn sau khi tích hợp payment gateway thật → hoàn tiền tự động
+- Khách cần cung cấp **lý do hoàn hàng** khi tạo yêu cầu (text tự do, không giới hạn lý do)
 
 ### Business rules đơn hàng:
 - Đơn hàng online **snapshot** thông tin sản phẩm tại thời điểm đặt: **tên, giá variant, SKU, ảnh, thông tin variant (JSON)**
@@ -183,6 +208,88 @@ Lưu lịch sử + In hóa đơn
 ## 9. Cache Strategy
 
 - **Order Service** cache thông tin product (tên, giá, SKU, ảnh, variant attributes) trong **Redis (ElastiCache)**
-- Chiến lược: **write-through** — Product Service ghi MySQL + ghi Redis cùng lúc
-- Khi product thay đổi → Product Service publish SQS → Order Service **invalidate** cache tương ứng
-- Cache miss (hiếm) → Order Service gọi **HTTP** sang Product Service → ghi lại Redis
+- Chiến lược: **Cache-aside + SQS invalidation**
+  - Order Service tự đọc từ Redis, nếu miss → gọi HTTP sang Product Service → ghi vào Redis
+  - Khi product thay đổi → Product Service publish `product-updated-queue` → Order Service consume → invalidate cache
+  - Product Service **không** ghi trực tiếp vào Redis của Order Service (đảm bảo service independence)
+
+## 10. Quy tắc kỹ thuật
+
+### Order Status State Machine
+
+Chỉ cho phép các transition sau, implement validation trong Order Service Domain layer:
+
+```
+PENDING → CONFIRMED → PREPARING → SHIPPING → DELIVERED
+PENDING → CANCELLED
+CONFIRMED → CANCELLED
+DELIVERED → RETURN_REQUESTED → RETURN_PICKING → RETURN_SHIPPING → RETURN_COMPLETED
+```
+
+### Auto-cancel Idempotency
+
+- Background job chỉ cancel nếu `status = PENDING` (optimistic locking)
+- Dùng **outbox pattern**: ghi cancel event trong cùng transaction với update order
+- Đảm bảo inventory restoration không bị duplicate
+
+### Concurrent Inventory Deduction
+
+- Dùng ScyllaDB **conditional update** để tránh overselling:
+```cql
+UPDATE inventory_by_store
+SET quantity = quantity - N
+WHERE store_id = ? AND product_variant_id = ?
+IF quantity >= N;
+```
+
+### Inventory Transfer (Saga Pattern)
+
+- Nhập hàng từ kho tổng vào cửa hàng dùng **Saga pattern**
+- Ghi `inventory_transactions` trước làm source of truth
+- Retry dựa trên transaction log nếu bước nào fail
+
+### Đặt hàng Online (Saga Pattern)
+
+```
+1. Order Service tạo đơn (status: CREATED)
+2. Gọi Store & Inventory Service trừ kho
+3. Thành công → update status: PENDING
+4. Thất bại → update status: FAILED
+```
+
+### Technical Debt có kế hoạch
+
+- Bảng `payments` hiện nằm trong Order Service DB (giai đoạn mock)
+- Khi tích hợp payment gateway thật → tách ra **Payment Service** với DB riêng
+- Order Service chỉ lưu `payment_status` + `payment_id` (reference)
+
+### POS Connectivity
+
+- POS yêu cầu **kết nối internet** để hoạt động
+- Offline mode không nằm trong scope hiện tại
+
+### API Versioning
+
+- Dùng **URL versioning**: `/api/v1/...`
+
+### price_history
+
+- Là **append-only log**, không áp dụng soft delete (exception của quy tắc chung)
+
+### SQS Queue Design
+
+- Mỗi queue có **Dead Letter Queue (DLQ)** riêng
+- `maxReceiveCount: 3` — sau 3 lần retry thất bại → chuyển vào DLQ
+- Đơn POS publish qua `order-status-queue` (status: DELIVERED) thay vì `analytics-queue` riêng
+
+### Sync Service-to-Service Calls
+
+| Caller | Callee | Mục đích | Khi nào |
+|---|---|---|---|
+| Order Service | Store & Inventory Service | Kiểm tra + trừ tồn kho | Khi tạo đơn hàng |
+| Order Service | Product Service | Lấy product info (cache miss) | Khi Redis cache miss |
+| Order Service | User Service | Lấy thông tin địa chỉ | Khi tạo đơn hàng online |
+| Order Service | Store & Inventory Service | Hoàn trả tồn kho | Khi cancel/return đơn |
+
+- Tất cả sync call cần có **timeout** và **retry** policy
+- Cần implement **circuit breaker** cho các call quan trọng

@@ -27,8 +27,7 @@
                         │                       AWS SQS                           │
                         │                                                         │
                         │  [order-confirmed-queue]    [order-status-queue]        │
-                        │  [payment-queue]            [analytics-queue]           │
-                        │  [product-updated-queue]                                │
+                        │  [payment-queue]            [product-updated-queue]     │
                         └───────────────────────┬─────────────────────────────────┘
                                                 │ Consume
                                    ┌────────────┼────────────┐
@@ -45,25 +44,25 @@
 
 ## 2. Danh sách Microservices
 
-| Service | Loại | Database | Mô tả |
-|---|---|---|---|
-| Identity Service | Web API | AWS Cognito | Xác thực, phân quyền JWT |
-| User Service | Web API | MySQL | Quản lý profile, địa chỉ người dùng, store_staff (dùng Cognito `sub` làm id) |
-| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá (product level + variant level), lịch sử giá |
-| Store & Inventory Service | Web API | ScyllaDB | Quản lý cửa hàng, kho tổng, tồn kho theo từng cửa hàng, nhập hàng từ kho tổng |
-| Order Service | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product, auto-cancel |
-| Payment Service | Worker | - | Consume queue, xử lý thanh toán (mock) |
-| Notification Service | Worker | - | Consume queue, gửi email qua AWS SES |
-| Analytics Service | Worker | DynamoDB | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng |
+| Service                   | Loại    | Database      | Mô tả                                                                                             |
+| ---------------------------| ---------| ---------------| ---------------------------------------------------------------------------------------------------|
+| Identity Service          | Web API | AWS Cognito   | Xác thực, phân quyền JWT                                                                          |
+| User Service              | Web API | MySQL         | Quản lý profile, địa chỉ người dùng, store_staff (dùng Cognito `sub` làm id)                      |
+| Product Service           | Web API | MySQL         | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá (product level + variant level), lịch sử giá |
+| Store & Inventory Service | Web API | ScyllaDB      | Quản lý cửa hàng, kho tổng, tồn kho theo từng cửa hàng, nhập hàng từ kho tổng                     |
+| Order Service             | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product, auto-cancel                      |
+| Payment Service           | Worker  | -             | Consume queue, xử lý thanh toán (mock)                                                            |
+| Notification Service      | Worker  | -             | Consume queue, gửi email qua AWS SES                                                              |
+| Analytics Service         | Worker  | DynamoDB      | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng                                              |
 
 ---
 
 ## 3. Phân chia Database
 
 | Database            | Service sử dụng                              | Lý do                                                                                                                                           |
-|---------------------|----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------aa|
+| ---------------------| ----------------------------------------------| -------------------------------------------------------------------------------------------------------------------------------------------------|
 | MySQL               | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction                                                                                                        |
-| Redis (ElastiCache) | Order Service                                | Cache thông tin product (tên, giá product, giá variant, SKU, ảnh, variant attributes) — write-through, cache miss gọi HTTP sang Product Service |
+| Redis (ElastiCache) | Order Service                                | Cache thông tin product (tên, giá product, giá variant, SKU, ảnh, variant attributes) — cache-aside + SQS invalidation, cache miss gọi HTTP sang Product Service |
 | ScyllaDB            | Store & Inventory Service                    | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời                                                                         |
 | DynamoDB            | Analytics Service                            | Event log, schema linh hoạt, không cần join phức tạp                                                                                            |
 
@@ -75,8 +74,7 @@
 | -----------------------| -----------------| -----------------------------------------| -------------------------------------------------------------|
 | order-confirmed-queue | Order Service   | Payment Service                         | Kích hoạt xử lý thanh toán sau khi đơn được xác nhận        |
 | payment-queue         | Payment Service | Order Service, Notification Service     | Kết quả thanh toán → cập nhật trạng thái đơn + gửi email    |
-| order-status-queue    | Order Service   | Notification Service, Analytics Service | Mỗi lần trạng thái đơn thay đổi → gửi email + ghi analytics |
-| analytics-queue       | Order Service   | Analytics Service                       | Ghi nhận đơn POS và đơn online vào DynamoDB                 |
+| order-status-queue    | Order Service   | Notification Service, Analytics Service | Mỗi lần trạng thái đơn thay đổi → gửi email + ghi analytics (bao gồm cả đơn POS) |
 | product-updated-queue | Product Service | Order Service                           | Product thay đổi → Order Service invalidate Redis cache     |
 
 ---
@@ -90,10 +88,13 @@ Khách chọn sản phẩm → thêm giỏ hàng
         ↓
 Khách chọn cửa hàng + địa chỉ giao hàng → xác nhận đặt hàng
         ↓
-[Store & Inventory Service] Kiểm tra tồn kho, trừ tạm thời
+[Order Service] Tạo đơn hàng (status: CREATED, snapshot product info)
         ↓
-[Order Service] Tạo đơn hàng (status: PENDING, snapshot product info), set TTL 1 ngày
+[Store & Inventory Service] Kiểm tra tồn kho, trừ tạm thời (conditional update: IF quantity >= N)
         ↓
+Thành công → [Order Service] Cập nhật status: PENDING, set expires_at (+ 1 ngày)
+Thất bại  → [Order Service] Cập nhật status: FAILED
+        ↓ (nếu PENDING)
 Publish → order-confirmed-queue
         ↓
 [Payment Service] Xử lý thanh toán mock
@@ -130,11 +131,11 @@ Publish → order-status-queue
 ```
 Nhân viên chọn sản phẩm + số lượng trên web
         ↓
-[Order Service] Tạo đơn POS (type: POS, customer: WALK_IN)
+[Order Service] Tạo đơn POS (type: POS, customer: WALK_IN, status: DELIVERED)
         ↓
-[Store & Inventory Service] Trừ tồn kho cửa hàng
+[Store & Inventory Service] Trừ tồn kho cửa hàng (conditional update)
         ↓
-Publish → analytics-queue
+Publish → order-status-queue (status: DELIVERED)
         ↓
 [Analytics Service] Ghi nhận đơn POS vào DynamoDB
         ↓
@@ -160,11 +161,11 @@ Publish → order-status-queue
 [Notification Service] Gửi email hoàn hàng hoàn tất
 ```
 
-### 5.5 Luồng cache Product (Write-through + Invalidation)
+### 5.5 Luồng cache Product (Cache-aside + SQS Invalidation)
 
 ```
 Khi Product được tạo/update:
-[Product Service] Ghi MySQL → ghi Redis (write-through)
+[Product Service] Ghi MySQL
         ↓
 Publish → product-updated-queue
         ↓
@@ -172,8 +173,10 @@ Publish → product-updated-queue
 
 Khi Order Service cần thông tin product:
 Đọc Redis → cache hit → trả về
-           → cache miss → HTTP call sang Product Service → ghi lại Redis
+           → cache miss → HTTP call sang Product Service → ghi vào Redis → trả về
 ```
+
+> Product Service **không** ghi trực tiếp vào Redis của Order Service (đảm bảo service independence).
 
 ### 5.6 Luồng nhập hàng từ kho tổng vào cửa hàng
 
@@ -182,7 +185,13 @@ Admin/Cửa hàng trưởng tạo yêu cầu nhập hàng
         ↓
 [Store & Inventory Service] Kiểm tra tồn kho kho tổng
         ↓
-Trừ số lượng kho tổng + Cộng số lượng cửa hàng (atomic)
+Ghi inventory_transactions (TRANSFER_OUT + TRANSFER_IN) làm source of truth
+        ↓
+Trừ số lượng kho tổng (conditional update: IF quantity >= N)
+        ↓
+Cộng số lượng cửa hàng
+        ↓
+Nếu bước nào fail → retry dựa trên transaction log (Saga pattern)
 ```
 
 ---
