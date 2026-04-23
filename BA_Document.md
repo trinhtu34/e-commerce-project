@@ -34,12 +34,17 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
   - **Nhân viên cửa hàng**: xử lý đơn hàng, cập nhật trạng thái
   - **Cửa hàng trưởng**: quản lý nhân viên, xem báo cáo cửa hàng
   - **Admin (chủ chuỗi)**: toàn quyền, xem báo cáo toàn chuỗi
+- Thông tin profile người dùng (họ tên, SĐT, địa chỉ) được quản lý bởi **User Service**, dùng Cognito `sub` làm định danh
 
 ## 2. Sản phẩm & Danh mục
 
 - Sản phẩm đa danh mục: mỹ phẩm, vật dụng gia đình, đồ ăn đóng gói, v.v.
-- Mỗi sản phẩm có thể có nhiều variant (ví dụ: dung tích, khối lượng, hương vị)
+- Danh mục có **3 cấp**: ví dụ `Vật dụng → Đồ gia dụng → Bếp`
+- Mỗi sản phẩm có thể có nhiều variant, mỗi variant là **1 tổ hợp thuộc tính** (ví dụ: `Dung tích: 330ml + Hương vị: Cola`)
+- Mỗi variant có **mã SKU riêng** (ví dụ: `PEPSI-330-COLA`)
+- Đơn vị tính đồng nhất: **cái** cho tất cả sản phẩm
 - **Giá đồng nhất toàn chuỗi**, không phân biệt cửa hàng
+- Ảnh sản phẩm lưu trên **AWS S3**, hệ thống chỉ lưu URL
 - Tồn kho quản lý riêng theo từng cửa hàng và kho tổng
 - Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá, v.v.
 
@@ -51,12 +56,17 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 ### Luồng mua hàng của khách:
 
 1. Khách chọn sản phẩm và variant muốn mua
-2. Hệ thống hiển thị **danh sách cửa hàng** kèm **số lượng tồn kho còn lại** của từng cửa hàng
+2. Khách thêm vào **giỏ hàng** (giỏ hàng gắn với tài khoản, chưa gắn cửa hàng)
+3. Khi chuẩn bị thanh toán, hệ thống hiển thị **danh sách cửa hàng** kèm **số lượng tồn kho còn lại** của từng cửa hàng
    - Cửa hàng gần nhất với địa chỉ khách được **gợi ý ưu tiên** lên đầu
    - Cửa hàng hết hàng vẫn hiển thị nhưng bị **disable**, không thể chọn
-3. Khách **chọn cửa hàng** muốn mua từ danh sách
-4. Khách thêm vào giỏ hàng → tiến hành đặt hàng
+4. Khách **chọn cửa hàng** và **địa chỉ giao hàng** → xác nhận đặt hàng
 5. Đơn hàng được gắn với cửa hàng đã chọn, tồn kho trừ tại cửa hàng đó
+
+### Giỏ hàng:
+- Gắn với **tài khoản người dùng**, không gắn cửa hàng
+- Mỗi cart item lưu `product_variant_id + quantity`
+- Thêm cùng 1 variant 2 lần → **cộng dồn số lượng**
 
 ## 4. Đơn hàng & Tracking
 
@@ -109,7 +119,7 @@ Lưu lịch sử + In hóa đơn
 - Giai đoạn sau: Tích hợp cổng thanh toán thật (VNPay, MoMo hoặc Stripe)
 - Lưu lịch sử giao dịch cho mỗi đơn hàng
 
-## 6. Thông báo (Notification)
+## 7. Thông báo (Notification)
 
 - Gửi email qua **AWS SES**
 - Trigger khi trạng thái đơn hàng thay đổi
@@ -121,7 +131,7 @@ Lưu lịch sử + In hóa đơn
   - Xác nhận yêu cầu hoàn hàng
   - Hoàn hàng hoàn tất
 
-## 7. Analytics & Báo cáo
+## 8. Analytics & Báo cáo
 
 - Track **danh mục sản phẩm** đang được ưa chuộng (theo số lượng đơn hàng, doanh thu)
 - Track **sản phẩm cụ thể** đang bán chạy

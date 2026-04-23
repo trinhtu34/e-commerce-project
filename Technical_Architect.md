@@ -47,9 +47,10 @@
 | Service | Loại | Database | Mô tả |
 |---|---|---|---|
 | Identity Service | Web API | AWS Cognito | Xác thực, phân quyền JWT |
-| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục, giá |
+| User Service | Web API | MySQL | Quản lý profile, địa chỉ người dùng (dùng Cognito `sub` làm id) |
+| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá |
 | Store & Inventory Service | Web API | ScyllaDB | Quản lý cửa hàng, tồn kho theo từng cửa hàng |
-| Order Service | Web API | MySQL | Tạo và quản lý đơn hàng (online + POS) |
+| Order Service | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product |
 | Payment Service | Worker | - | Consume queue, xử lý thanh toán (mock) |
 | Notification Service | Worker | - | Consume queue, gửi email qua AWS SES |
 | Analytics Service | Worker | DynamoDB | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng |
@@ -60,7 +61,8 @@
 
 | Database | Service sử dụng | Lý do |
 |---|---|---|
-| MySQL | Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction |
+| MySQL | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction |
+| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá, variant) — write-through, cache miss gọi HTTP sang Product Service |
 | ScyllaDB | Store & Inventory Service | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời |
 | DynamoDB | Analytics Service | Event log, schema linh hoạt, không cần join phức tạp |
 
@@ -74,6 +76,7 @@
 | payment-queue | Payment Service | Order Service, Notification Service | Kết quả thanh toán → cập nhật trạng thái đơn + gửi email |
 | order-status-queue | Order Service | Notification Service, Analytics Service | Mỗi lần trạng thái đơn thay đổi → gửi email + ghi analytics |
 | analytics-queue | Order Service | Analytics Service | Ghi nhận đơn POS và đơn online vào DynamoDB |
+| product-updated-queue | Product Service | Order Service | Product thay đổi → Order Service invalidate Redis cache |
 
 ---
 
@@ -159,6 +162,7 @@ Publish → order-status-queue
 k8s Cluster
 ├── Namespace: api
 │   ├── identity-service (Deployment)
+│   ├── user-service (Deployment)
 │   ├── product-service (Deployment)
 │   ├── store-inventory-service (Deployment)
 │   └── order-service (Deployment)
@@ -173,7 +177,84 @@ k8s Cluster
     └── scylladb (StatefulSet)
 ```
 
-- **DynamoDB**: dùng AWS managed (không deploy trong k8s)
-- **AWS SQS**: dùng AWS managed (không deploy trong k8s)
-- **AWS Cognito**: dùng AWS managed (không deploy trong k8s)
-- **AWS SES**: dùng AWS managed (không deploy trong k8s)
+- **Redis**: AWS ElastiCache for Redis (managed)
+- **DynamoDB**: AWS managed
+- **AWS SQS**: AWS managed
+- **AWS Cognito**: AWS managed
+- **AWS SES**: AWS managed
+- **AWS S3**: lưu ảnh sản phẩm, truy cập qua Pre-Signed URL (Lambda + API Gateway)
+
+---
+
+## 8. Backend Architecture (Clean Architecture + CQRS)
+
+### 8.1 Cấu trúc chung cho Web API Services
+
+```
+ServiceName/
+├── ServiceName.Domain/
+│   ├── Entities/
+│   ├── Enums/
+│   └── Events/            # Domain events
+│
+├── ServiceName.Application/
+│   ├── Commands/          # Write operations
+│   ├── Queries/           # Read operations
+│   ├── Handlers/          # MediatR handlers
+│   ├── DTOs/
+│   └── Interfaces/        # IRepository, ISqsPublisher, ...
+│
+├── ServiceName.Infrastructure/
+│   ├── Persistence/       # DbContext, Repository implementations
+│   ├── Messaging/         # SQS publisher implementation
+│   └── ExternalServices/  # HTTP clients gọi service khác
+│
+└── ServiceName.API/
+    ├── Controllers/
+    └── Middleware/        # Auth, error handling, logging
+```
+
+### 8.2 Cấu trúc cho Worker Services
+
+Worker không có HTTP layer nên chỉ cần 3 layer:
+
+```
+WorkerName/
+├── WorkerName.Application/
+│   ├── Handlers/          # Xử lý message từ SQS
+│   ├── DTOs/
+│   └── Interfaces/
+│
+├── WorkerName.Infrastructure/
+│   ├── Messaging/         # SQS consumer implementation
+│   └── ExternalServices/  # AWS SES, HTTP clients, ...
+│
+└── WorkerName.Worker/
+    ├── Workers/           # BackgroundService implementations
+    └── Program.cs         # DI setup, host configuration
+```
+
+### 8.3 CQRS Flow
+
+```
+HTTP Request
+    ↓
+Controller → Send(Command / Query) via MediatR
+                ↓
+          Handler (Application layer)
+                ↓
+          IRepository / IExternalService (interfaces)
+                ↓
+          Infrastructure implements
+                ↓
+          Database / AWS SQS / External API
+```
+
+### 8.4 Dependency Rule
+
+```
+API → Application → Domain
+Infrastructure → Application → Domain
+
+Domain không phụ thuộc vào bất kỳ layer nào
+```
