@@ -35,6 +35,7 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
   - **Cửa hàng trưởng**: quản lý nhân viên, xem báo cáo cửa hàng
   - **Admin (chủ chuỗi)**: toàn quyền, xem báo cáo toàn chuỗi
 - Thông tin profile người dùng (họ tên, SĐT, địa chỉ) được quản lý bởi **User Service**, dùng Cognito `sub` làm định danh
+- Nhân viên và cửa hàng trưởng được gắn với cửa hàng qua bảng trung gian `store_staff` (lưu trong User Service)
 
 ## 2. Sản phẩm & Danh mục
 
@@ -43,7 +44,8 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 - Mỗi sản phẩm có thể có nhiều variant, mỗi variant là **1 tổ hợp thuộc tính** (ví dụ: `Dung tích: 330ml + Hương vị: Cola`)
 - Mỗi variant có **mã SKU riêng** (ví dụ: `PEPSI-330-COLA`)
 - Đơn vị tính đồng nhất: **cái** cho tất cả sản phẩm
-- **Giá đồng nhất toàn chuỗi**, không phân biệt cửa hàng
+- **Giá đồng nhất toàn chuỗi**, không phân biệt cửa hàng, có lưu **lịch sử thay đổi giá**
+- Sản phẩm có trạng thái: `ACTIVE` / `OUT_OF_STOCK` / `SUSPENDED` (tạm dừng kinh doanh)
 - Ảnh sản phẩm lưu trên **AWS S3**, hệ thống chỉ lưu URL
 - Tồn kho quản lý riêng theo từng cửa hàng và kho tổng
 - Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá, v.v.
@@ -51,7 +53,9 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 ## 3. Cửa hàng & Kho
 
 - Nhiều cửa hàng trong cùng một thành phố, mỗi cửa hàng có tồn kho riêng
-- Một **kho tổng** duy nhất cho toàn chuỗi
+- Một **kho tổng** duy nhất cho toàn chuỗi, quản lý bởi Store & Inventory Service
+- Tồn kho lưu theo dạng: **số lượng còn lại của từng cửa hàng** + **số lượng còn lại của kho tổng**
+- Có nghiệp vụ **nhập hàng từ kho tổng vào cửa hàng**: số lượng kho tổng giảm, số lượng cửa hàng tăng tương ứng (atomic)
 
 ### Luồng mua hàng của khách:
 
@@ -73,7 +77,7 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 ### Luồng đặt hàng bình thường:
 
 ```
-Chờ xác nhận (từ cửa hàng & khách hàng)
+Chờ xác nhận (cả khách hàng và cửa hàng xác nhận trong vòng 1 ngày, quá hạn tự động hủy)
         ↓
 Đang chuẩn bị hàng
         ↓
@@ -93,6 +97,9 @@ Yêu cầu hoàn hàng
         ↓
 Người bán xác nhận đã nhận hàng hoàn
 ```
+
+- Đơn hàng online snapshot thông tin sản phẩm tại thời điểm đặt: **tên, giá, SKU, ảnh, thông tin variant**
+- Đơn hàng quá hạn xác nhận (1 ngày) sẽ **tự động hủy**, tồn kho được hoàn trả
 
 ## 5. Mua hàng tại quầy (POS)
 

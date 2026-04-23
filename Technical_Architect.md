@@ -3,57 +3,58 @@
 ## 1. Tổng quan kiến trúc
 
 ```
-                        ┌─────────────────────────────────────────────────────┐
-                        │                   Clients                           │
-                        │   Vue 3 (Customer Web)   Vue 3 (Staff/POS Web)      │
-                        └─────────────────┬───────────────────────────────────┘
-                                          │ HTTPS
-                                          ▼
-                        ┌─────────────────────────────────────────────────────┐
-                        │              Envoy API Gateway                      │
-                        │         (Routing + JWT Validation)                  │
-                        └──┬──────────┬──────────┬──────────┬─────────────────┘
-                           │          │          │          │
-              ┌────────────▼─┐  ┌─────▼──────┐  ┌▼──────────────┐  ┌▼────────────────┐
-              │ Identity     │  │ Product    │  │ Order         │  │ Store &         │
-              │ Service      │  │ Service    │  │ Service       │  │ Inventory       │
-              │              │  │            │  │               │  │ Service         │
-              │ AWS Cognito  │  │ MySQL      │  │ MySQL         │  │ ScyllaDB        │
-              └──────────────┘  └────────────┘  └───────┬───────┘  └────────────────┘
-                                                        │
-                                                        │ Publish events
-                                                        ▼
-                        ┌─────────────────────────────────────────────────────┐
-                        │                    AWS SQS                          │
-                        │                                                     │
-                        │  [order-confirmed-queue]  [order-status-queue]      │
-                        │  [payment-queue]          [analytics-queue]         │
-                        └──────────────────┬──────────────────────────────────┘
-                                           │ Consume
-                              ┌────────────┼────────────┐
-                              ▼            ▼            ▼
-                    ┌──────────────┐ ┌──────────┐ ┌────────────────┐
-                    │ Payment      │ │Notification│ │ Analytics      │
-                    │ Service      │ │ Service  │ │ Service        │
-                    │ (Worker)     │ │ (Worker) │ │ (Worker)       │
-                    │              │ │ AWS SES  │ │ DynamoDB       │
-                    └──────────────┘ └──────────┘ └────────────────┘
+                        ┌─────────────────────────────────────────────────────────┐
+                        │                      Clients                            │
+                        │    Vue 3 (Customer Web)     Vue 3 (Staff/POS Web)       │
+                        └──────────────────────┬──────────────────────────────────┘
+                                               │ HTTPS
+                                               ▼
+                        ┌─────────────────────────────────────────────────────────┐
+                        │                 Envoy API Gateway                       │
+                        │            (Routing + JWT Validation)                   │
+                        └──┬────────┬─────────┬──────────┬──────────┬─────────────┘
+                           │        │         │          │          │
+            ┌──────────────▼┐ ┌─────▼──────┐ ┌▼────────┐ ┌▼─────────────┐ ┌▼───────────────┐
+            │ Identity      │ │ User       │ │ Product │ │ Order        │ │ Store &        │
+            │ Service       │ │ Service    │ │ Service │ │ Service      │ │ Inventory      │
+            │               │ │            │ │         │ │              │ │ Service        │
+            │ AWS Cognito   │ │ MySQL      │ │ MySQL   │ │ MySQL+Redis │ │ ScyllaDB       │
+            └───────────────┘ └────────────┘ └────┬────┘ └──────┬──────┘ └────────────────┘
+                                                  │             │
+                                                  │  Publish    │ Publish events
+                                                  ▼             ▼
+                        ┌─────────────────────────────────────────────────────────┐
+                        │                       AWS SQS                           │
+                        │                                                         │
+                        │  [order-confirmed-queue]    [order-status-queue]        │
+                        │  [payment-queue]            [analytics-queue]           │
+                        │  [product-updated-queue]                                │
+                        └───────────────────────┬─────────────────────────────────┘
+                                                │ Consume
+                                   ┌────────────┼────────────┐
+                                   ▼            ▼            ▼
+                         ┌──────────────┐ ┌────────────┐ ┌────────────────┐
+                         │ Payment      │ │Notification│ │ Analytics      │
+                         │ Service      │ │ Service    │ │ Service        │
+                         │ (Worker)     │ │ (Worker)   │ │ (Worker)       │
+                         │              │ │ AWS SES    │ │ DynamoDB       │
+                         └──────────────┘ └────────────┘ └────────────────┘
 ```
 
 ---
 
 ## 2. Danh sách Microservices
 
-| Service                   | Loại    | Database      | Mô tả                                                           |
-| ---------------------------| ---------| ---------------| -----------------------------------------------------------------|
-| Identity Service          | Web API | AWS Cognito   | Xác thực, phân quyền JWT                                        |
-| User Service              | Web API | MySQL         | Quản lý profile, địa chỉ người dùng (dùng Cognito `sub` làm id) |
-| Product Service           | Web API | MySQL         | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá            |
-| Store & Inventory Service | Web API | ScyllaDB      | Quản lý cửa hàng, tồn kho theo từng cửa hàng                    |
-| Order Service             | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product |
-| Payment Service           | Worker  | -             | Consume queue, xử lý thanh toán (mock)                          |
-| Notification Service      | Worker  | -             | Consume queue, gửi email qua AWS SES                            |
-| Analytics Service         | Worker  | DynamoDB      | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng            |
+| Service | Loại | Database | Mô tả |
+|---|---|---|---|
+| Identity Service | Web API | AWS Cognito | Xác thực, phân quyền JWT |
+| User Service | Web API | MySQL | Quản lý profile, địa chỉ người dùng, store_staff (dùng Cognito `sub` làm id) |
+| Product Service | Web API | MySQL | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá, lịch sử giá |
+| Store & Inventory Service | Web API | ScyllaDB | Quản lý cửa hàng, kho tổng, tồn kho theo từng cửa hàng, nhập hàng từ kho tổng |
+| Order Service | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product, auto-cancel |
+| Payment Service | Worker | - | Consume queue, xử lý thanh toán (mock) |
+| Notification Service | Worker | - | Consume queue, gửi email qua AWS SES |
+| Analytics Service | Worker | DynamoDB | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng |
 
 ---
 
@@ -62,7 +63,7 @@
 | Database | Service sử dụng | Lý do |
 |---|---|---|
 | MySQL | User Service, Product Service, Order Service | Dữ liệu có quan hệ, cần ACID transaction |
-| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá, variant) — write-through, cache miss gọi HTTP sang Product Service |
+| Redis (ElastiCache) | Order Service | Cache thông tin product (tên, giá, SKU, ảnh, variant) — write-through, cache miss gọi HTTP sang Product Service |
 | ScyllaDB | Store & Inventory Service | Tồn kho cần read/write cực nhanh, scale tốt khi nhiều request đồng thời |
 | DynamoDB | Analytics Service | Event log, schema linh hoạt, không cần join phức tạp |
 
@@ -85,11 +86,13 @@
 ### 5.1 Luồng đặt hàng Online
 
 ```
-Khách chọn sản phẩm + cửa hàng
+Khách chọn sản phẩm → thêm giỏ hàng
         ↓
-[Store & Inventory Service] Kiểm tra tồn kho
+Khách chọn cửa hàng + địa chỉ giao hàng → xác nhận đặt hàng
         ↓
-[Order Service] Tạo đơn hàng (status: PENDING)
+[Store & Inventory Service] Kiểm tra tồn kho, trừ tạm thời
+        ↓
+[Order Service] Tạo đơn hàng (status: PENDING, snapshot product info), set TTL 1 ngày
         ↓
 Publish → order-confirmed-queue
         ↓
@@ -100,7 +103,7 @@ Publish → payment-queue
 [Order Service] Cập nhật status: CONFIRMED
 [Notification Service] Gửi email xác nhận đặt hàng
         ↓
-Nhân viên cập nhật trạng thái đơn hàng (PREPARING → SHIPPING → DELIVERED)
+Nhân viên cập nhật trạng thái (PREPARING → SHIPPING → DELIVERED)
         ↓ (mỗi lần thay đổi)
 Publish → order-status-queue
         ↓
@@ -108,7 +111,21 @@ Publish → order-status-queue
 [Analytics Service] Ghi nhận vào DynamoDB
 ```
 
-### 5.2 Luồng mua tại quầy (POS)
+### 5.2 Luồng tự động hủy đơn (Auto-cancel)
+
+```
+Đơn hàng PENDING quá 1 ngày chưa được xác nhận
+        ↓
+[Order Service] Background job cập nhật status: CANCELLED
+        ↓
+[Store & Inventory Service] Hoàn trả tồn kho đã trừ tạm thời
+        ↓
+Publish → order-status-queue
+        ↓
+[Notification Service] Gửi email thông báo hủy đơn
+```
+
+### 5.3 Luồng mua tại quầy (POS)
 
 ```
 Nhân viên chọn sản phẩm + số lượng trên web
@@ -124,7 +141,7 @@ Publish → analytics-queue
 [Order Service] Trả về dữ liệu hóa đơn → Frontend in hóa đơn
 ```
 
-### 5.3 Luồng hoàn hàng
+### 5.4 Luồng hoàn hàng
 
 ```
 Khách yêu cầu hoàn hàng
@@ -143,6 +160,31 @@ Publish → order-status-queue
 [Notification Service] Gửi email hoàn hàng hoàn tất
 ```
 
+### 5.5 Luồng cache Product (Write-through + Invalidation)
+
+```
+Khi Product được tạo/update:
+[Product Service] Ghi MySQL → ghi Redis (write-through)
+        ↓
+Publish → product-updated-queue
+        ↓
+[Order Service] Consume → invalidate Redis cache tương ứng
+
+Khi Order Service cần thông tin product:
+Đọc Redis → cache hit → trả về
+           → cache miss → HTTP call sang Product Service → ghi lại Redis
+```
+
+### 5.6 Luồng nhập hàng từ kho tổng vào cửa hàng
+
+```
+Admin/Cửa hàng trưởng tạo yêu cầu nhập hàng
+        ↓
+[Store & Inventory Service] Kiểm tra tồn kho kho tổng
+        ↓
+Trừ số lượng kho tổng + Cộng số lượng cửa hàng (atomic)
+```
+
 ---
 
 ## 6. Phân quyền theo Role
@@ -151,8 +193,8 @@ Publish → order-status-queue
 |---|---|
 | Khách hàng | Xem sản phẩm, đặt hàng, xem lịch sử đơn hàng của mình |
 | Nhân viên cửa hàng | Xử lý đơn online, tạo đơn POS, cập nhật trạng thái đơn |
-| Cửa hàng trưởng | Toàn quyền cửa hàng + xem báo cáo cửa hàng mình |
-| Admin | Toàn quyền hệ thống + xem báo cáo toàn chuỗi |
+| Cửa hàng trưởng | Toàn quyền cửa hàng + xem báo cáo cửa hàng mình + nhập hàng từ kho tổng |
+| Admin | Toàn quyền hệ thống + xem báo cáo toàn chuỗi + quản lý kho tổng |
 
 ---
 
