@@ -12,10 +12,10 @@
 |---|---|---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | 6 | 0 | 0 |
 | **Thiết kế mới** | 10 | 6 | 4 | 0 |
-| **Thiết kế cũ tồn đọng** | 2 | 1 | 1 | 0 |
+| **Thiết kế cũ tồn đọng** | 2 | 2 | 0 | 0 |
 | **Thiếu sót tài liệu** | 5 | 0 | 5 | 0 |
 | **Gợi ý cải thiện** | 6 | 0 | 0 | 6 |
-| **TỔNG** | 29 | 13 | 10 | 6 |
+| **TỔNG** | 29 | 14 | 9 | 6 |
 
 ---
 
@@ -230,7 +230,7 @@ ScyllaDB hỗ trợ paging qua driver, nhưng tài liệu chưa đề cập pagi
 
 ---
 
-### 3.2 Retry policy chưa chi tiết
+### 3.2 ~~Retry policy chưa chi tiết~~ ✅ ĐÃ GIẢI QUYẾT
 
 **File:** BA_Document.md mục 10
 
@@ -240,15 +240,31 @@ BA mục 10 có DLQ maxReceiveCount: 3, nhưng chưa có:
 - Poison message handling
 - DLQ monitoring/alarm
 
+**Giải pháp đã thực hiện:**
+- ✅ Bổ sung retry policy chi tiết
+- ✅ Define exponential backoff config
+- ✅ Define poison message handling
+- ✅ Define DLQ monitoring/alarm
+
+**Retry Policy đã thêm vào BA_Document.md mục 10:**
+- **Exponential Backoff:** Initial delay: 1s, multiplier: 2, max delay: 60s
+- **Retry Sequence:** 1s → 2s → 4s → DLQ
+- **Poison Message Handling:** maxReceiveCount: 3, DLQ retention: 14 ngày
+- **DLQ Monitoring:** CloudWatch Alarm (> 10 messages trong 5 phút), Dashboard, Daily report
+- **Error Classification:** Transient errors (có thể retry) vs Permanent errors (chuyển DLQ ngay)
+- **DLQ Replay Strategy:** Batch replay (max 100 messages/batch), monitor success rate
+
+**Technical_Architect.md mục 4.1.5 đã cập nhật Error Handling section với retry policy chi tiết**
+
 **Hành động:**
-- [ ] Bổ sung retry policy chi tiết
-- [ ] Define exponential backoff config
-- [ ] Define poison message handling
-- [ ] Define DLQ monitoring/alarm
+- [x] Bổ sung retry policy chi tiết
+- [x] Define exponential backoff config
+- [x] Define poison message handling
+- [x] Define DLQ monitoring/alarm
 
 **Ưu tiên:** 🟡 Trung bình
 **Phức tạp:** Thấp
-**Thời gian ước tính:** 1-2 giờ
+**Thời gian ước tính:** 1-2 giờ ✅ HOÀN THÀNH
 
 ---
 

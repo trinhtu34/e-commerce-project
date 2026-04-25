@@ -350,6 +350,62 @@ IF quantity >= N;
 - `maxReceiveCount: 3` — sau 3 lần retry thất bại → chuyển vào DLQ
 - Đơn POS publish qua `order-status-queue` (status: DELIVERED) thay vì `analytics-queue` riêng
 
+### Retry Policy
+
+**Exponential Backoff:**
+- **Initial delay:** 1 giây (lần retry đầu tiên)
+- **Backoff multiplier:** 2 (mỗi lần retry tăng gấp đôi thời gian chờ)
+- **Max delay:** 60 giây (không chờ quá 60 giây giữa các retry)
+- **Retry sequence:**
+  - Retry 1: chờ 1 giây
+  - Retry 2: chờ 2 giây
+  - Retry 3: chờ 4 giây
+  - Retry 4: chờ 8 giây
+  - Retry 5: chờ 16 giây
+  - Retry 6: chờ 32 giây
+  - Retry 7: chờ 60 giây (max)
+  - Retry 8+: chờ 60 giây (max)
+
+**Poison Message Handling:**
+- Sau `maxReceiveCount: 3` lần retry thất bại → message chuyển vào DLQ
+- DLQ message được giữ trong **14 ngày** (AWS SQS default retention period)
+- Poison message cần được **manual review** bởi developer/ops team
+- Sau khi fix bug → có thể **replay** message từ DLQ về main queue
+
+**DLQ Monitoring & Alerting:**
+- **CloudWatch Alarm:** Trigger khi DLQ có > 10 messages trong 5 phút
+- **Alarm action:** Gửi email/SNS notification đến dev team
+- **Dashboard:** Hiển thị số lượng messages trong DLQ theo thời gian
+- **Daily report:** Gửi summary về DLQ messages vào cuối ngày
+
+**Error Classification:**
+
+**Transient Errors (có thể retry):**
+- Network timeout
+- Database connection error
+- External API rate limit (429)
+- Temporary service unavailable (503)
+- Message processing timeout
+
+**Permanent Errors (không nên retry, chuyển DLQ ngay):**
+- Invalid message format (JSON parse error)
+- Missing required fields
+- Business logic validation error
+- Data integrity violation
+- Authentication/authorization error
+
+**Implementation Guidelines:**
+- Consumer phải log chi tiết error message (stack trace, error code)
+- Dùng `message_id` để track message xuyên suốt retry flow
+- Implement circuit breaker cho external API calls
+- Monitor retry rate: nếu > 50% messages cần retry → có vấn đề nghiêm trọng
+
+**DLQ Replay Strategy:**
+- Sau khi fix bug → replay message từ DLQ
+- Replay theo batch (max 100 messages/batch)
+- Monitor replay success rate
+- Nếu replay fail nhiều lần → cần manual investigation
+
 ### Sync Service-to-Service Calls
 
 | Caller | Callee | Mục đích | Khi nào |

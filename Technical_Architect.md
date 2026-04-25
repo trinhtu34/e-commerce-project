@@ -402,9 +402,52 @@ Tất cả message đều dùng **JSON format** với các field chuẩn:
 - Dùng `message_id` để dedup (lưu vào Redis hoặc database)
 
 **Error Handling:**
-- Nếu consumer fail → message sẽ được retry (max 3 lần)
-- Sau 3 lần fail → chuyển vào DLQ
+- Nếu consumer fail → message sẽ được retry với exponential backoff
+- Sau `maxReceiveCount: 3` lần fail → chuyển vào DLQ
 - DLQ cần có monitoring và manual intervention
+
+**Retry Policy Configuration:**
+- **Initial delay:** 1 giây
+- **Backoff multiplier:** 2 (exponential backoff)
+- **Max delay:** 60 giây
+- **Max receive count:** 3 (sau 3 lần retry → DLQ)
+- **DLQ retention:** 14 ngày
+
+**Retry Sequence:**
+```
+Retry 1: chờ 1 giây
+Retry 2: chờ 2 giây
+Retry 3: chờ 4 giây
+→ Chuyển vào DLQ
+```
+
+**Error Classification:**
+
+**Transient Errors (có thể retry):**
+- Network timeout
+- Database connection error
+- External API rate limit (429)
+- Temporary service unavailable (503)
+- Message processing timeout
+
+**Permanent Errors (không nên retry, chuyển DLQ ngay):**
+- Invalid message format (JSON parse error)
+- Missing required fields
+- Business logic validation error
+- Data integrity violation
+- Authentication/authorization error
+
+**DLQ Monitoring:**
+- **CloudWatch Alarm:** Trigger khi DLQ có > 10 messages trong 5 phút
+- **Alarm action:** Gửi email/SNS notification đến dev team
+- **Dashboard:** Hiển thị số lượng messages trong DLQ theo thời gian
+- **Daily report:** Gửi summary về DLQ messages vào cuối ngày
+
+**DLQ Replay Strategy:**
+- Sau khi fix bug → replay message từ DLQ
+- Replay theo batch (max 100 messages/batch)
+- Monitor replay success rate
+- Nếu replay fail nhiều lần → cần manual investigation
 
 **Versioning:**
 - Khi thay đổi message schema → tăng `version`

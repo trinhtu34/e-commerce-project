@@ -7,6 +7,7 @@
 > Review lần 5: 25/04/2026 — Giải quyết issue 2.2: Thiếu validation khi thêm sản phẩm vào giỏ hàng.
 > Review lần 6: 25/04/2026 — Giải quyết issue 2.7: Thiếu xử lý khi khách hủy đơn chủ động.
 > Review lần 7: 25/04/2026 — Giải quyết issue 2.8: SQS message schema chưa được define.
+> Review lần 8: 25/04/2026 — Giải quyết issue 3.2: Retry policy chưa chi tiết.
 
 ---
 
@@ -205,15 +206,17 @@ ScyllaDB hỗ trợ paging qua driver, nhưng tài liệu chưa đề cập pagi
 
 ---
 
-### 3.2 Retry policy chưa chi tiết
+### 3.2 ~~Retry policy chưa chi tiết~~ ✅ ĐÃ SỬA
 
-**Trạng thái:** BA mục 10 có DLQ maxReceiveCount: 3, nhưng chưa có:
-- Exponential backoff config (initial delay, max delay)
-- Poison message handling
-- DLQ monitoring/alarm
-
-**Hành động:**
-- [ ] Bổ sung retry policy chi tiết
+> BA_Document.md mục 10 đã bổ sung đầy đủ:
+> - Exponential backoff config (initial delay: 1s, multiplier: 2, max delay: 60s)
+> - Retry sequence (1s → 2s → 4s → DLQ)
+> - Poison message handling (maxReceiveCount: 3, DLQ retention: 14 ngày)
+> - DLQ monitoring & alerting (CloudWatch Alarm: > 10 messages trong 5 phút)
+> - Error classification (transient vs permanent errors)
+> - DLQ replay strategy (batch replay, monitor success rate)
+>
+> Technical_Architect.md mục 4.1.5 đã cập nhật Error Handling section với retry policy chi tiết
 
 ---
 
@@ -331,6 +334,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | ✅ | Thiếu validation khi thêm sản phẩm vào giỏ hàng | BA_Document.md mục 3 → bổ sung 4 validation rules (product status, inventory check, variant deletion, quantity limits) |
 | ✅ | Thiếu xử lý khi khách hủy đơn chủ động | BA_Document.md mục 4 → bổ sung business rules hủy đơn, Database_Schema.md → thêm cancelled_by, cancel_reason, cancelled_at, Technical_Architect.md mục 5.2.1 → luồng hủy đơn chủ động |
 | ✅ | SQS message schema chưa được define | Technical_Architect.md mục 4.1 → bổ sung message schema cho 4 queues (order-confirmed-queue, payment-queue, order-status-queue, product-updated-queue) + message processing guidelines |
+| ✅ | Retry policy chưa chi tiết | BA_Document.md mục 10 → bổ sung retry policy (exponential backoff, error classification, DLQ monitoring), Technical_Architect.md mục 4.1.5 → cập nhật Error Handling section |
 
 ---
 
@@ -340,7 +344,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 |---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | ✅ Đã sửa 6/6 |
 | **Thiết kế mới** | 10 | ✅ Đã sửa 6/10, còn 4 issue |
-| **Thiết kế cũ tồn đọng** | 2 | ✅ Đã sửa 1/2 |
+| **Thiết kế cũ tồn đọng** | 2 | ✅ Đã sửa 2/2 |
 | **Thiếu sót tài liệu** | 5 | Bổ sung vào Technical_Architect.md |
 | **Gợi ý cải thiện** | 6 | Nice to have, làm sau |
 
@@ -355,6 +359,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 7. ~~**Define validation rules khi thêm sản phẩm vào giỏ hàng** (mục 2.2)~~ ✅ ĐÃ SỬA
 8. ~~**Define xử lý khi khách hủy đơn chủ động** (mục 2.7)~~ ✅ ĐÃ SỬA
 9. ~~**Define SQS message schema** (mục 2.8)~~ ✅ ĐÃ SỬA
+10. ~~**Bổ sung retry policy chi tiết** (mục 3.2)~~ ✅ ĐÃ SỬA
 
 ---
 
