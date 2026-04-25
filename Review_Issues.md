@@ -4,6 +4,8 @@
 >
 > Review lần 3: 23/04/2026 — Deep review toàn bộ BA_Document.md, Technical_Architect.md, Database_Schema.md.
 > Review lần 4: 25/04/2026 — Giải quyết issue 3.1: Tách payments ra Payment Service DB.
+> Review lần 5: 25/04/2026 — Giải quyết issue 2.2: Thiếu validation khi thêm sản phẩm vào giỏ hàng.
+> Review lần 6: 25/04/2026 — Giải quyết issue 2.7: Thiếu xử lý khi khách hủy đơn chủ động.
 
 ---
 
@@ -66,19 +68,13 @@
 
 ---
 
-### 2.2 Thiếu validation khi thêm sản phẩm vào giỏ hàng
+### 2.2 ~~Thiếu validation khi thêm sản phẩm vào giỏ hàng~~ ✅ ĐÃ SỬA
 
-**File:** BA_Document.md mục 3
-
-Khi khách thêm variant vào giỏ, tài liệu chưa define:
-- Có kiểm tra product status không? (SUSPENDED, OUT_OF_STOCK → có cho thêm vào giỏ?)
-- Có kiểm tra variant còn tồn kho ở bất kỳ cửa hàng nào không?
-- Nếu variant bị xóa (soft delete) sau khi đã nằm trong giỏ → xử lý thế nào?
-- Giới hạn quantity tối đa mỗi variant trong giỏ?
-
-**Hành động:**
-- [ ] Define validation rules khi add to cart
-- [ ] Define xử lý khi variant trong giỏ bị thay đổi/xóa
+> BA_Document.md mục 3 đã bổ sung đầy đủ validation rules:
+> - **Product Status Validation**: ACTIVE (cho phép), SUSPENDED (warning), OUT_OF_STOCK (chặn)
+> - **Inventory Check Strategy**: Không check khi thêm, check khi hiển thị giỏ và checkout
+> - **Xử lý khi variant bị thay đổi/xóa**: Soft delete (disable), Hard delete (xóa), Price change (warning)
+> - **Quantity Limits**: Max per variant (10), Max total items (50), Max per product (20), Min quantity (1)
 
 ---
 
@@ -149,19 +145,17 @@ Ghi chú: *"Lấy tất cả cửa hàng: full scan (số lượng ít, chấp n
 
 ---
 
-### 2.7 Thiếu xử lý khi khách hủy đơn chủ động
+### 2.7 ~~Thiếu xử lý khi khách hủy đơn chủ động~~ ✅ ĐÃ SỬA
 
-**File:** BA_Document.md mục 4, Database_Schema.md (orders state machine)
-
-State machine cho phép `PENDING → CANCELLED` và `CONFIRMED → CANCELLED`, nhưng tài liệu chỉ đề cập **auto-cancel** (quá hạn). Chưa define:
-- Khách có thể **chủ động hủy** đơn không? Ở trạng thái nào?
-- Cửa hàng có thể hủy đơn không? (hết hàng thực tế, sản phẩm lỗi...)
-- Khi khách/cửa hàng hủy → luồng hoàn trả inventory giống auto-cancel?
-- Cần lưu `cancelled_by` (user/staff/system) và `cancel_reason`?
-
-**Hành động:**
-- [ ] Define rõ ai được hủy đơn, ở trạng thái nào
-- [ ] Cân nhắc thêm `cancelled_by` và `cancel_reason` vào orders table
+> BA_Document.md mục 4 đã bổ sung đầy đủ:
+> - Ai có thể hủy đơn: Khách hàng, Nhân viên, Cửa hàng trưởng, Admin, System
+> - Khi nào có thể hủy: Khách hàng (PENDING/CONFIRMED), Staff/Manager (PENDING/CONFIRMED/PREPARING), Admin (bất kỳ)
+> - Lý do hủy đơn: Định nghĩa cho từng role
+> - Luồng xử lý khi hủy đơn: CANCELLED → hoàn trả inventory → gửi email → hoàn tiền
+>
+> Database_Schema.md đã thêm `cancelled_by`, `cancel_reason`, `cancelled_at` vào orders table
+> Technical_Architect.md mục 5.2.1 đã thêm luồng hủy đơn chủ động
+> Database_Schema.md inventory_transactions đã thêm type: CANCEL
 
 ---
 
@@ -339,6 +333,8 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | ✅ | Thiếu API versioning | BA mục 10 → URL versioning /api/v1/ |
 | ✅ | POS offline | BA mục 10 → yêu cầu internet, offline out of scope |
 | ✅ | Bảng payments vi phạm database-per-service | Database_Schema.md → tách ra Payment Service DB, Technical_Architect.md → Payment Service database = MySQL |
+| ✅ | Thiếu validation khi thêm sản phẩm vào giỏ hàng | BA_Document.md mục 3 → bổ sung 4 validation rules (product status, inventory check, variant deletion, quantity limits) |
+| ✅ | Thiếu xử lý khi khách hủy đơn chủ động | BA_Document.md mục 4 → bổ sung business rules hủy đơn, Database_Schema.md → thêm cancelled_by, cancel_reason, cancelled_at, Technical_Architect.md mục 5.2.1 → luồng hủy đơn chủ động |
 
 ---
 
@@ -347,7 +343,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | Mức độ | Tổng | Hành động |
 |---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | ✅ Đã sửa 6/6 |
-| **Thiết kế mới** | 10 | Review và quyết định từng issue |
+| **Thiết kế mới** | 10 | ✅ Đã sửa 5/10, còn 5 issue |
 | **Thiết kế cũ tồn đọng** | 2 | ✅ Đã sửa 1/2 |
 | **Thiếu sót tài liệu** | 5 | Bổ sung vào Technical_Architect.md |
 | **Gợi ý cải thiện** | 6 | Nice to have, làm sau |
@@ -360,6 +356,8 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 4. ~~**Define checkout khi thiếu hàng** (mục 2.1)~~ ✅ ĐÃ SỬA
 5. ~~**Define hoàn hàng business rules** (mục 2.3)~~ ✅ ĐÃ SỬA
 6. ~~**Tách payments ra Payment Service DB** (mục 3.1)~~ ✅ ĐÃ SỬA
+7. ~~**Define validation rules khi thêm sản phẩm vào giỏ hàng** (mục 2.2)~~ ✅ ĐÃ SỬA
+8. ~~**Define xử lý khi khách hủy đơn chủ động** (mục 2.7)~~ ✅ ĐÃ SỬA
 
 ---
 
@@ -367,3 +365,4 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 *Cross-check lần 2: 23/04/2026*
 *Deep review lần 3: 23/04/2026*
 *Review lần 4: 25/04/2026*
+*Review lần 5: 25/04/2026*

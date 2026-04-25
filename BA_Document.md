@@ -103,6 +103,41 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 - Mỗi cart item lưu `product_variant_id + quantity`
 - Thêm cùng 1 variant 2 lần → **cộng dồn số lượng**
 
+### Validation Rules khi thêm sản phẩm vào giỏ hàng:
+
+#### 1. Product Status Validation
+- **ACTIVE**: Cho phép thêm vào giỏ hàng bình thường
+- **SUSPENDED**: Cho phép thêm vào giỏ hàng nhưng hiển thị warning "Sản phẩm tạm ngừng kinh doanh"
+- **OUT_OF_STOCK**: Chặn ngay, không cho thêm vào giỏ hàng + hiển thị thông báo "Sản phẩm hiện hết hàng"
+
+#### 2. Inventory Check Strategy
+- **Khi thêm vào giỏ hàng**: Không kiểm tra tồn kho (tối ưu UX, khách có thể thêm nhiều sản phẩm trước khi checkout)
+- **Khi hiển thị giỏ hàng**: Check xem có cửa hàng nào đủ hàng cho tất cả variant trong giỏ không
+- **Khi checkout**: Validate lại tồn kho thực tế tại cửa hàng đã chọn
+
+#### 3. Xử lý khi variant bị thay đổi/xóa
+- **Soft delete (is_deleted = TRUE)**:
+  - Hiển thị trong giỏ hàng nhưng disable (không thể tăng số lượng)
+  - Hiển thị thông báo "Sản phẩm không còn tồn tại"
+  - Không cho phép checkout với variant này
+- **Hard delete (xóa thật khỏi database)**:
+  - Tự động xóa khỏi giỏ hàng
+  - Hiển thị thông báo "Sản phẩm đã bị xóa khỏi hệ thống"
+- **Price change**:
+  - Giỏ hàng lưu snapshot price tại thời điểm thêm
+  - Hiển thị warning "Giá sản phẩm đã thay đổi" nếu price hiện tại khác snapshot
+
+#### 4. Quantity Limits
+- **Max per variant**: 10 cái (configurable)
+- **Max total items**: 50 cái (configurable) - tổng số lượng tất cả variant trong giỏ
+- **Max per product**: 20 cái (tất cả variant của cùng 1 sản phẩm)
+- **Min quantity**: 1 cái (không cho phép quantity = 0)
+
+**Error messages:**
+- "Số lượng tối đa cho mỗi sản phẩm là 10 cái"
+- "Giỏ hàng không được quá 50 sản phẩm"
+- "Số lượng tối thiểu là 1 cái"
+
 ## 4. Đơn hàng & Tracking
 
 ### Luồng đặt hàng bình thường:
@@ -154,6 +189,38 @@ Nhân viên xử lý hoàn tiền thủ công
 - Đơn hàng online **snapshot** thông tin sản phẩm tại thời điểm đặt: **tên, giá variant, SKU, ảnh, thông tin variant (JSON)**
 - Đơn hàng quá hạn xác nhận (1 ngày) sẽ **tự động hủy** bởi background job, tồn kho được hoàn trả
 - Giá snapshot vào order item là **variant price** (giá thực tế)
+
+### Business rules hủy đơn chủ động:
+
+#### Ai có thể hủy đơn:
+- **Khách hàng:** Có thể hủy đơn hàng online của mình
+- **Nhân viên cửa hàng:** Có thể hủy đơn hàng online (khi hết hàng, sản phẩm lỗi, khách yêu cầu)
+- **Cửa hàng trưởng:** Có thể hủy đơn hàng online
+- **Admin:** Có thể hủy bất kỳ đơn hàng nào
+- **System:** Auto-cancel (quá hạn xác nhận)
+
+#### Khi nào có thể hủy:
+- **Khách hàng:** Có thể hủy khi đơn ở trạng thái `PENDING` hoặc `CONFIRMED`
+- **Nhân viên/Cửa hàng trưởng:** Có thể hủy khi đơn ở trạng thái `PENDING`, `CONFIRMED`, hoặc `PREPARING`
+- **Admin:** Có thể hủy ở bất kỳ trạng thái nào (trừ `DELIVERED` đã quá 2 ngày, `RETURN_COMPLETED`)
+- **System:** Auto-cancel khi đơn `PENDING` quá 1 ngày chưa được xác nhận
+
+#### Lý do hủy đơn:
+- **Khách hàng:** "Khách hàng yêu cầu hủy", "Đổi ý", "Tìm được sản phẩm khác", "Lý do khác"
+- **Nhân viên/Cửa hàng trưởng:** "Hết hàng", "Sản phẩm lỗi", "Khách hàng yêu cầu", "Lý do khác"
+- **System:** "Quá hạn xác nhận"
+
+#### Luồng xử lý khi hủy đơn:
+1. Người có quyền hủy đơn → cập nhật status: `CANCELLED`
+2. Lưu `cancelled_by` (user/staff/system) và `cancel_reason`
+3. Hoàn trả tồn kho về cửa hàng đã xử lý đơn
+4. Gửi email thông báo hủy đơn cho khách hàng
+5. Nếu đã thanh toán → nhân viên hoàn tiền thủ công (giai đoạn sau → hoàn tiền tự động)
+
+#### Lưu ý:
+- Đơn POS không hỗ trợ hủy (đã giao hàng ngay lập tức)
+- Khi hủy đơn → luồng hoàn trả inventory giống auto-cancel
+- Cần lưu `cancelled_by` và `cancel_reason` để audit và truy vết
 
 ## 5. Mua hàng tại quầy (POS)
 
@@ -223,8 +290,15 @@ Chỉ cho phép các transition sau, implement validation trong Order Service Do
 PENDING → CONFIRMED → PREPARING → SHIPPING → DELIVERED
 PENDING → CANCELLED
 CONFIRMED → CANCELLED
+PREPARING → CANCELLED (chỉ staff/manager/admin)
 DELIVERED → RETURN_REQUESTED → RETURN_PICKING → RETURN_SHIPPING → RETURN_COMPLETED
 ```
+
+**Quy tắc hủy đơn:**
+- **Khách hàng:** Có thể hủy từ `PENDING` hoặc `CONFIRMED`
+- **Nhân viên/Cửa hàng trưởng:** Có thể hủy từ `PENDING`, `CONFIRMED`, hoặc `PREPARING`
+- **Admin:** Có thể hủy từ bất kỳ trạng thái nào (trừ `DELIVERED` đã quá 2 ngày, `RETURN_COMPLETED`)
+- **System:** Auto-cancel từ `PENDING` khi quá 1 ngày
 
 ### Auto-cancel Idempotency
 

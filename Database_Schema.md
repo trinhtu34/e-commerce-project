@@ -209,6 +209,9 @@ product_variants (1) ──── (N) price_history
 | note | TEXT | NULL | Ghi chú đơn hàng |
 | return_reason | TEXT | NULL | Lý do hoàn hàng (chỉ khi có yêu cầu hoàn) |
 | return_requested_at | DATETIME | NULL | Thời điểm khách yêu cầu hoàn hàng |
+| cancelled_by | ENUM('CUSTOMER','STAFF','MANAGER','ADMIN','SYSTEM') | NULL | Ai đã hủy đơn (NULL = chưa hủy) |
+| cancel_reason | TEXT | NULL | Lý do hủy đơn (NULL = chưa hủy) |
+| cancelled_at | DATETIME | NULL | Thời điểm hủy đơn (NULL = chưa hủy) |
 | expires_at | DATETIME | NULL | Thời hạn xác nhận (PENDING + 1 ngày), NULL cho POS |
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | updated_at | DATETIME | NULL | |
@@ -217,12 +220,20 @@ product_variants (1) ──── (N) price_history
 
 **Order Status State Machine:**
 ```
-CREATED → PENDING → CONFIRMED → PREPARING → SHIPPING → DELIVERED
+PENDING → CONFIRMED → PREPARING → SHIPPING → DELIVERED
 CREATED → FAILED
 PENDING → CANCELLED
 CONFIRMED → CANCELLED
+PREPARING → CANCELLED (chỉ staff/manager/admin)
 DELIVERED → RETURN_REQUESTED → RETURN_PICKING → RETURN_SHIPPING → RETURN_COMPLETED
 ```
+
+**Cancellation rules:**
+- **Khách hàng:** Có thể hủy từ `PENDING` hoặc `CONFIRMED`
+- **Nhân viên/Cửa hàng trưởng:** Có thể hủy từ `PENDING`, `CONFIRMED`, hoặc `PREPARING`
+- **Admin:** Có thể hủy từ bất kỳ trạng thái nào (trừ `DELIVERED` đã quá 2 ngày, `RETURN_COMPLETED`)
+- **System:** Auto-cancel từ `PENDING` khi quá 1 ngày
+- Khi hủy đơn → lưu `cancelled_by`, `cancel_reason`, `cancelled_at`
 
 **Return validation:**
 - `DELIVERED → RETURN_REQUESTED` chỉ được phép trong vòng **2 ngày** kể từ `updated_at` của DELIVERED
@@ -443,6 +454,11 @@ Bán hàng (online/POS):
     inventory_by_store:   quantity -= N
     inventory_by_variant: quantity -= N
     inventory_transactions: INSERT (type: SALE, quantity_change: -N)
+
+Hủy đơn (proactive cancellation):
+    inventory_by_store:   quantity += N
+    inventory_by_variant: quantity += N
+    inventory_transactions: INSERT (type: CANCEL, quantity_change: +N)
 
 Hoàn hàng:
     inventory_by_store:   quantity += N

@@ -11,11 +11,11 @@
 | Mức độ | Tổng | Đã giải quyết | Cần giải quyết | Nice to have |
 |---|---|---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | 6 | 0 | 0 |
-| **Thiết kế mới** | 10 | 3 | 7 | 0 |
+| **Thiết kế mới** | 10 | 5 | 5 | 0 |
 | **Thiết kế cũ tồn đọng** | 2 | 1 | 1 | 0 |
 | **Thiếu sót tài liệu** | 5 | 0 | 5 | 0 |
 | **Gợi ý cải thiện** | 6 | 0 | 0 | 6 |
-| **TỔNG** | 29 | 10 | 13 | 6 |
+| **TỔNG** | 29 | 12 | 11 | 6 |
 
 ---
 
@@ -47,7 +47,7 @@
 
 ---
 
-### 2.2 Thiếu validation khi thêm sản phẩm vào giỏ hàng
+### 2.2 ~~Thiếu validation khi thêm sản phẩm vào giỏ hàng~~ ✅ ĐÃ GIẢI QUYẾT
 
 **File:** BA_Document.md mục 3
 
@@ -58,17 +58,27 @@ Khi khách thêm variant vào giỏ, tài liệu chưa define:
 - Nếu variant bị xóa (soft delete) sau khi đã nằm trong giỏ → xử lý thế nào?
 - Giới hạn quantity tối đa mỗi variant trong giỏ?
 
+**Giải pháp đã thực hiện:**
+- ✅ Define validation rules khi add to cart
+- ✅ Define xử lý khi variant trong giỏ bị thay đổi/xóa
+
+**Validation Rules đã thêm vào BA_Document.md:**
+1. **Product Status Validation**: ACTIVE (cho phép), SUSPENDED (warning), OUT_OF_STOCK (chặn)
+2. **Inventory Check Strategy**: Không check khi thêm, check khi hiển thị giỏ và checkout
+3. **Xử lý khi variant bị thay đổi/xóa**: Soft delete (disable), Hard delete (xóa), Price change (warning)
+4. **Quantity Limits**: Max per variant (10), Max total items (50), Max per product (20), Min quantity (1)
+
 **Hành động:**
-- [ ] Define validation rules khi add to cart
-- [ ] Define xử lý khi variant trong giỏ bị thay đổi/xóa
+- [x] Define validation rules khi add to cart
+- [x] Define xử lý khi variant trong giỏ bị thay đổi/xóa
 
 **Ưu tiên:** 🔴 Cao
 **Phức tạp:** Trung bình
-**Thời gian ước tính:** 2-3 giờ
+**Thời gian ước tính:** 2-3 giờ ✅ HOÀN THÀNH
 
 ---
 
-### 2.7 Thiếu xử lý khi khách hủy đơn chủ động
+### 2.7 ~~Thiếu xử lý khi khách hủy đơn chủ động~~ ✅ ĐÃ GIẢI QUYẾT
 
 **File:** BA_Document.md mục 4, Database_Schema.md (orders state machine)
 
@@ -79,13 +89,26 @@ State machine cho phép `PENDING → CANCELLED` và `CONFIRMED → CANCELLED`, n
 - Khi khách/cửa hàng hủy → luồng hoàn trả inventory giống auto-cancel?
 - Cần lưu `cancelled_by` (user/staff/system) và `cancel_reason`?
 
+**Giải pháp đã thực hiện:**
+- ✅ Define rõ ai được hủy đơn, ở trạng thái nào
+- ✅ Thêm `cancelled_by`, `cancel_reason`, `cancelled_at` vào orders table
+- ✅ Cập nhật BA_Document.md mục 4 với business rules hủy đơn
+- ✅ Cập nhật Technical_Architect.md mục 5.2.1 với luồng hủy đơn chủ động
+- ✅ Cập nhật Database_Schema.md inventory_transactions với type: CANCEL
+
+**Business Rules đã thêm vào BA_Document.md:**
+- **Ai có thể hủy:** Khách hàng, Nhân viên, Cửa hàng trưởng, Admin, System
+- **Khi nào có thể hủy:** Khách hàng (PENDING/CONFIRMED), Staff/Manager (PENDING/CONFIRMED/PREPARING), Admin (bất kỳ)
+- **Lý do hủy:** Định nghĩa cho từng role
+- **Luồng xử lý:** CANCELLED → hoàn trả inventory → gửi email → hoàn tiền
+
 **Hành động:**
-- [ ] Define rõ ai được hủy đơn, ở trạng thái nào
-- [ ] Cân nhắc thêm `cancelled_by` và `cancel_reason` vào orders table
+- [x] Define rõ ai được hủy đơn, ở trạng thái nào
+- [x] Thêm `cancelled_by` và `cancel_reason` vào orders table
 
 **Ưu tiên:** 🔴 Cao
 **Phức tạp:** Trung bình
-**Thời gian ước tính:** 2-3 giờ
+**Thời gian ước tính:** 2-3 giờ ✅ HOÀN THÀNH
 
 ---
 
@@ -411,7 +434,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 
 | Mức độ | Tổng | Đã hoàn thành | Đang làm | Chưa bắt đầu |
 |---|---|---|---|---|
-| 🔴 Cao | 4 | 1 | 0 | 3 |
+| 🔴 Cao | 4 | 2 | 0 | 2 |
 | 🟡 Trung bình | 5 | 0 | 0 | 5 |
 | 🟢 Thấp | 5 | 0 | 0 | 5 |
 | 💡 Nice to have | 6 | 0 | 0 | 6 |
@@ -420,7 +443,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 
 | Loại | Tổng | Đã hoàn thành | Đang làm | Chưa bắt đầu |
 |---|---|---|---|---|
-| Thiết kế mới | 7 | 0 | 0 | 7 |
+| Thiết kế mới | 7 | 1 | 0 | 6 |
 | Thiết kế cũ tồn đọng | 2 | 1 | 0 | 1 |
 | Thiếu sót tài liệu | 5 | 0 | 0 | 5 |
 | Gợi ý cải thiện | 6 | 0 | 0 | 6 |
@@ -431,7 +454,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 
 ### Giai đoạn 1: Ưu tiên cao (Tuần 1)
 1. ~~3.1 Bảng `payments` vi phạm database-per-service~~ ✅ Đã hoàn thành
-2. 2.2 Thiếu validation khi thêm sản phẩm vào giỏ hàng
+2. ~~2.2 Thiếu validation khi thêm sản phẩm vào giỏ hàng~~ ✅ Đã hoàn thành
 3. 2.7 Thiếu xử lý khi khách hủy đơn chủ động
 4. 2.8 SQS message schema chưa được define
 

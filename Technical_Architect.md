@@ -126,6 +126,39 @@ Publish → order-status-queue
 [Notification Service] Gửi email thông báo hủy đơn
 ```
 
+### 5.2.1 Luồng hủy đơn chủ động (Proactive Cancellation)
+
+```
+Khách hàng / Nhân viên / Cửa hàng trưởng / Admin yêu cầu hủy đơn
+        ↓
+[Order Service] Validate quyền hủy + trạng thái đơn:
+  - Khách hàng: PENDING hoặc CONFIRMED
+  - Nhân viên/Cửa hàng trưởng: PENDING, CONFIRMED, hoặc PREPARING
+  - Admin: Bất kỳ trạng thái nào (trừ DELIVERED quá 2 ngày, RETURN_COMPLETED)
+        ↓
+[Order Service] Cập nhật status: CANCELLED
+  - Lưu cancelled_by (CUSTOMER/STAFF/MANAGER/ADMIN/SYSTEM)
+  - Lưu cancel_reason (lý do hủy)
+  - Lưu cancelled_at (thời điểm hủy)
+        ↓
+[Store & Inventory Service] Hoàn trả tồn kho về cửa hàng
+  - inventory_by_store: quantity += N
+  - inventory_by_variant: quantity += N
+  - inventory_transactions: INSERT (type: CANCEL, quantity_change: +N)
+        ↓
+Publish → order-status-queue
+        ↓
+[Notification Service] Gửi email thông báo hủy đơn cho khách hàng
+        ↓
+Nếu đã thanh toán → Nhân viên hoàn tiền thủ công
+  (Giai đoạn sau → Payment Service hoàn tiền tự động)
+```
+
+**Lưu ý:**
+- Đơn POS không hỗ trợ hủy (đã giao hàng ngay lập tức)
+- Khi hủy đơn → luồng hoàn trả inventory giống auto-cancel
+- Cần lưu `cancelled_by` và `cancel_reason` để audit và truy vết
+
 ### 5.3 Luồng mua tại quầy (POS)
 
 ```
