@@ -6,6 +6,7 @@
 > Review lần 4: 25/04/2026 — Giải quyết issue 3.1: Tách payments ra Payment Service DB.
 > Review lần 5: 25/04/2026 — Giải quyết issue 2.2: Thiếu validation khi thêm sản phẩm vào giỏ hàng.
 > Review lần 6: 25/04/2026 — Giải quyết issue 2.7: Thiếu xử lý khi khách hủy đơn chủ động.
+> Review lần 7: 25/04/2026 — Giải quyết issue 2.8: SQS message schema chưa được define.
 
 ---
 
@@ -159,19 +160,13 @@ Ghi chú: *"Lấy tất cả cửa hàng: full scan (số lượng ít, chấp n
 
 ---
 
-### 2.8 SQS message schema chưa được define
+### 2.8 ~~SQS message schema chưa được define~~ ✅ ĐÃ SỬA
 
-**File:** Technical_Architect.md mục 4
-
-Có 4 queue nhưng chưa define message format cho bất kỳ queue nào. Developer implement publisher và consumer cần biết:
-- Message body chứa những field gì?
-- Format: JSON? Có version field không?
-- Có correlation ID để trace không?
-
-**Gợi ý:** Define message schema cho ít nhất `order-status-queue` (queue quan trọng nhất, có 3 consumer).
-
-**Hành động:**
-- [ ] Define message schema cho từng SQS queue
+> Technical_Architect.md mục 4.1 đã bổ sung đầy đủ:
+> - Standard message fields (version, message_id, correlation_id, timestamp, event_type, data)
+> - Message schema cho 4 queues: order-confirmed-queue, payment-queue, order-status-queue, product-updated-queue
+> - Special cases: auto-cancel, proactive cancellation, return completed
+> - Message processing guidelines: idempotency, error handling, versioning, correlation ID, timestamp
 
 ---
 
@@ -335,6 +330,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | ✅ | Bảng payments vi phạm database-per-service | Database_Schema.md → tách ra Payment Service DB, Technical_Architect.md → Payment Service database = MySQL |
 | ✅ | Thiếu validation khi thêm sản phẩm vào giỏ hàng | BA_Document.md mục 3 → bổ sung 4 validation rules (product status, inventory check, variant deletion, quantity limits) |
 | ✅ | Thiếu xử lý khi khách hủy đơn chủ động | BA_Document.md mục 4 → bổ sung business rules hủy đơn, Database_Schema.md → thêm cancelled_by, cancel_reason, cancelled_at, Technical_Architect.md mục 5.2.1 → luồng hủy đơn chủ động |
+| ✅ | SQS message schema chưa được define | Technical_Architect.md mục 4.1 → bổ sung message schema cho 4 queues (order-confirmed-queue, payment-queue, order-status-queue, product-updated-queue) + message processing guidelines |
 
 ---
 
@@ -343,7 +339,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | Mức độ | Tổng | Hành động |
 |---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | ✅ Đã sửa 6/6 |
-| **Thiết kế mới** | 10 | ✅ Đã sửa 5/10, còn 5 issue |
+| **Thiết kế mới** | 10 | ✅ Đã sửa 6/10, còn 4 issue |
 | **Thiết kế cũ tồn đọng** | 2 | ✅ Đã sửa 1/2 |
 | **Thiếu sót tài liệu** | 5 | Bổ sung vào Technical_Architect.md |
 | **Gợi ý cải thiện** | 6 | Nice to have, làm sau |
@@ -358,6 +354,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 6. ~~**Tách payments ra Payment Service DB** (mục 3.1)~~ ✅ ĐÃ SỬA
 7. ~~**Define validation rules khi thêm sản phẩm vào giỏ hàng** (mục 2.2)~~ ✅ ĐÃ SỬA
 8. ~~**Define xử lý khi khách hủy đơn chủ động** (mục 2.7)~~ ✅ ĐÃ SỬA
+9. ~~**Define SQS message schema** (mục 2.8)~~ ✅ ĐÃ SỬA
 
 ---
 

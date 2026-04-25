@@ -79,6 +79,349 @@
 
 ---
 
+## 4.1 SQS Message Schema
+
+Tất cả message đều dùng **JSON format** với các field chuẩn:
+
+### Standard Message Fields
+
+```json
+{
+  "version": "1.0",
+  "message_id": "uuid-v4",
+  "correlation_id": "uuid-v4",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "event_type": "event.name",
+  "data": { ... }
+}
+```
+
+**Field mô tả:**
+- `version`: Message format version (để backward compatibility)
+- `message_id`: Unique ID của message (UUID v4)
+- `correlation_id`: ID để trace xuyên suốt flow (ví dụ: order_id)
+- `timestamp`: ISO 8601 timestamp khi message được publish
+- `event_type`: Tên event (ví dụ: "order.confirmed")
+- `data`: Payload cụ thể cho từng event type
+
+---
+
+### 4.1.1 order-confirmed-queue
+
+**Event Type:** `order.confirmed`
+
+**Publisher:** Order Service
+
+**Consumer:** Payment Service
+
+**Message Schema:**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440000",
+  "correlation_id": "order-123",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "event_type": "order.confirmed",
+  "data": {
+    "order_id": "order-123",
+    "user_id": "user-456",
+    "store_id": "store-789",
+    "order_type": "ONLINE",
+    "total_amount": 150000.00,
+    "currency": "VND",
+    "items": [
+      {
+        "product_variant_id": "variant-001",
+        "product_name": "Pepsi",
+        "sku": "PEPSI-330-COLA",
+        "quantity": 2,
+        "unit_price": 8000.00,
+        "subtotal": 16000.00
+      }
+    ],
+    "shipping_address": {
+      "street": "123 Đường ABC",
+      "district": "Quận 1",
+      "city": "TP. Hồ Chí Minh",
+      "latitude": 10.7769,
+      "longitude": 106.7009
+    },
+    "created_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 4.1.2 payment-queue
+
+**Event Type:** `payment.completed` / `payment.failed`
+
+**Publisher:** Payment Service
+
+**Consumer:** Order Service, Notification Service
+
+**Message Schema (Payment Completed):**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440001",
+  "correlation_id": "order-123",
+  "timestamp": "2025-01-15T10:31:00Z",
+  "event_type": "payment.completed",
+  "data": {
+    "payment_id": "payment-999",
+    "order_id": "order-123",
+    "user_id": "user-456",
+    "payment_method": "ONLINE",
+    "amount": 150000.00,
+    "currency": "VND",
+    "status": "SUCCESS",
+    "gateway_transaction_id": "GTX-123456789",
+    "gateway_response": {
+      "code": "00",
+      "message": "Transaction successful"
+    },
+    "paid_at": "2025-01-15T10:31:00Z"
+  }
+}
+```
+
+**Message Schema (Payment Failed):**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440002",
+  "correlation_id": "order-123",
+  "timestamp": "2025-01-15T10:31:00Z",
+  "event_type": "payment.failed",
+  "data": {
+    "payment_id": "payment-999",
+    "order_id": "order-123",
+    "user_id": "user-456",
+    "payment_method": "ONLINE",
+    "amount": 150000.00,
+    "currency": "VND",
+    "status": "FAILED",
+    "error_code": "INSUFFICIENT_BALANCE",
+    "error_message": "Số dư không đủ",
+    "failed_at": "2025-01-15T10:31:00Z"
+  }
+}
+```
+
+---
+
+### 4.1.3 order-status-queue
+
+**Event Type:** `order.status.changed`
+
+**Publisher:** Order Service
+
+**Consumer:** Notification Service, Analytics Service
+
+**Message Schema:**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440003",
+  "correlation_id": "order-123",
+  "timestamp": "2025-01-15T11:00:00Z",
+  "event_type": "order.status.changed",
+  "data": {
+    "order_id": "order-123",
+    "user_id": "user-456",
+    "store_id": "store-789",
+    "order_type": "ONLINE",
+    "old_status": "CONFIRMED",
+    "new_status": "PREPARING",
+    "total_amount": 150000.00,
+    "currency": "VND",
+    "items": [
+      {
+        "product_variant_id": "variant-001",
+        "product_name": "Pepsi",
+        "sku": "PEPSI-330-COLA",
+        "quantity": 2,
+        "unit_price": 8000.00,
+        "subtotal": 16000.00,
+        "category_id": "cat-123",
+        "category_path": "/1/2/3"
+      }
+    ],
+    "updated_at": "2025-01-15T11:00:00Z",
+    "additional_info": {
+      "cancelled_by": null,
+      "cancel_reason": null,
+      "return_reason": null
+    }
+  }
+}
+```
+
+**Special Cases:**
+
+**Auto-cancel:**
+```json
+{
+  "event_type": "order.status.changed",
+  "data": {
+    "order_id": "order-123",
+    "old_status": "PENDING",
+    "new_status": "CANCELLED",
+    "additional_info": {
+      "cancelled_by": "SYSTEM",
+      "cancel_reason": "Quá hạn xác nhận"
+    }
+  }
+}
+```
+
+**Proactive cancellation:**
+```json
+{
+  "event_type": "order.status.changed",
+  "data": {
+    "order_id": "order-123",
+    "old_status": "CONFIRMED",
+    "new_status": "CANCELLED",
+    "additional_info": {
+      "cancelled_by": "CUSTOMER",
+      "cancel_reason": "Khách hàng yêu cầu hủy"
+    }
+  }
+}
+```
+
+**Return completed:**
+```json
+{
+  "event_type": "order.status.changed",
+  "data": {
+    "order_id": "order-123",
+    "old_status": "RETURN_SHIPPING",
+    "new_status": "RETURN_COMPLETED",
+    "additional_info": {
+      "return_reason": "Sản phẩm bị lỗi"
+    }
+  }
+}
+```
+
+---
+
+### 4.1.4 product-updated-queue
+
+**Event Type:** `product.updated` / `product.deleted`
+
+**Publisher:** Product Service
+
+**Consumer:** Order Service
+
+**Message Schema (Product Updated):**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440004",
+  "correlation_id": "product-123",
+  "timestamp": "2025-01-15T12:00:00Z",
+  "event_type": "product.updated",
+  "data": {
+    "product_id": "product-123",
+    "product_name": "Pepsi",
+    "base_price": 8000.00,
+    "status": "ACTIVE",
+    "category_id": "cat-123",
+    "category_path": "/1/2/3",
+    "variants": [
+      {
+        "variant_id": "variant-001",
+        "sku": "PEPSI-330-COLA",
+        "price": 8000.00,
+        "attributes": {
+          "Dung tích": "330ml",
+          "Hương vị": "Cola"
+        }
+      }
+    ],
+    "updated_at": "2025-01-15T12:00:00Z"
+  }
+}
+```
+
+**Message Schema (Product Deleted - Soft Delete):**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440005",
+  "correlation_id": "product-123",
+  "timestamp": "2025-01-15T12:00:00Z",
+  "event_type": "product.deleted",
+  "data": {
+    "product_id": "product-123",
+    "deleted_at": "2025-01-15T12:00:00Z"
+  }
+}
+```
+
+**Message Schema (Variant Updated):**
+
+```json
+{
+  "version": "1.0",
+  "message_id": "550e8400-e29b-41d4-a716-446655440006",
+  "correlation_id": "variant-001",
+  "timestamp": "2025-01-15T12:00:00Z",
+  "event_type": "product.variant.updated",
+  "data": {
+    "product_id": "product-123",
+    "variant_id": "variant-001",
+    "sku": "PEPSI-330-COLA",
+    "price": 9000.00,
+    "attributes": {
+      "Dung tích": "330ml",
+      "Hương vị": "Cola"
+    },
+    "updated_at": "2025-01-15T12:00:00Z"
+  }
+}
+```
+
+---
+
+### 4.1.5 Message Processing Guidelines
+
+**Idempotency:**
+- Consumer phải xử lý message idempotently (cùng message_id chỉ xử lý 1 lần)
+- Dùng `message_id` để dedup (lưu vào Redis hoặc database)
+
+**Error Handling:**
+- Nếu consumer fail → message sẽ được retry (max 3 lần)
+- Sau 3 lần fail → chuyển vào DLQ
+- DLQ cần có monitoring và manual intervention
+
+**Versioning:**
+- Khi thay đổi message schema → tăng `version`
+- Consumer phải hỗ trợ backward compatibility (cả version cũ và mới)
+- Sau khi tất cả consumer đã migrate → có thể bỏ support version cũ
+
+**Correlation ID:**
+- `correlation_id` dùng để trace xuyên suốt flow
+- Ví dụ: `order-123` → tất cả message liên quan đến order này đều dùng correlation_id này
+- Dùng cho distributed tracing và debugging
+
+**Timestamp:**
+- `timestamp` là thời điểm message được publish (không phải thời điểm event xảy ra)
+- Event time có thể nằm trong `data` field (ví dụ: `created_at`, `updated_at`)
+
+---
+
 ## 5. Luồng xử lý chi tiết
 
 ### 5.1 Luồng đặt hàng Online

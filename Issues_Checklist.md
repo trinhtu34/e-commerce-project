@@ -11,11 +11,11 @@
 | Mức độ | Tổng | Đã giải quyết | Cần giải quyết | Nice to have |
 |---|---|---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | 6 | 0 | 0 |
-| **Thiết kế mới** | 10 | 5 | 5 | 0 |
+| **Thiết kế mới** | 10 | 6 | 4 | 0 |
 | **Thiết kế cũ tồn đọng** | 2 | 1 | 1 | 0 |
 | **Thiếu sót tài liệu** | 5 | 0 | 5 | 0 |
 | **Gợi ý cải thiện** | 6 | 0 | 0 | 6 |
-| **TỔNG** | 29 | 12 | 11 | 6 |
+| **TỔNG** | 29 | 13 | 10 | 6 |
 
 ---
 
@@ -112,7 +112,7 @@ State machine cho phép `PENDING → CANCELLED` và `CONFIRMED → CANCELLED`, n
 
 ---
 
-### 2.8 SQS message schema chưa được define
+### 2.8 ~~SQS message schema chưa được define~~ ✅ ĐÃ GIẢI QUYẾT
 
 **File:** Technical_Architect.md mục 4
 
@@ -122,15 +122,29 @@ Có 4 queue nhưng chưa define message format cho bất kỳ queue nào. Develo
 - Format: JSON? Có version field không?
 - Có correlation ID để trace không?
 
+**Giải pháp đã thực hiện:**
+- ✅ Define message schema cho `order-confirmed-queue`
+- ✅ Define message schema cho `payment-queue`
+- ✅ Define message schema cho `order-status-queue`
+- ✅ Define message schema cho `product-updated-queue`
+- ✅ Thêm message processing guidelines (idempotency, error handling, versioning, correlation ID, timestamp)
+
+**Message Schema đã thêm vào Technical_Architect.md mục 4.1:**
+- **Standard message fields:** version, message_id, correlation_id, timestamp, event_type, data
+- **order-confirmed-queue:** event_type: order.confirmed
+- **payment-queue:** event_type: payment.completed / payment.failed
+- **order-status-queue:** event_type: order.status.changed (bao gồm special cases: auto-cancel, proactive cancellation, return completed)
+- **product-updated-queue:** event_type: product.updated / product.deleted / product.variant.updated
+
 **Hành động:**
-- [ ] Define message schema cho `order-confirmed-queue`
-- [ ] Define message schema cho `payment-queue`
-- [ ] Define message schema cho `order-status-queue`
-- [ ] Define message schema cho `product-updated-queue`
+- [x] Define message schema cho `order-confirmed-queue`
+- [x] Define message schema cho `payment-queue`
+- [x] Define message schema cho `order-status-queue`
+- [x] Define message schema cho `product-updated-queue`
 
 **Ưu tiên:** 🔴 Cao
 **Phức tạp:** Trung bình
-**Thời gian ước tính:** 3-4 giờ
+**Thời gian ước tính:** 3-4 giờ ✅ HOÀN THÀNH
 
 ---
 
