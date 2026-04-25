@@ -200,6 +200,8 @@ product_variants (1) ──── (N) price_history
 | store_id | CHAR(36) | NOT NULL | Cửa hàng xử lý đơn |
 | type | ENUM('ONLINE','POS') | NOT NULL | Loại đơn hàng |
 | status | ENUM('CREATED','PENDING','CONFIRMED','PREPARING','SHIPPING','DELIVERED','FAILED','CANCELLED','RETURN_REQUESTED','RETURN_PICKING','RETURN_SHIPPING','RETURN_COMPLETED') | NOT NULL, DEFAULT 'CREATED' | |
+| payment_id | CHAR(36) | NULL | Reference đến Payment Service (NULL = đơn POS thanh toán tiền mặt) |
+| payment_status | ENUM('PENDING','COMPLETED','FAILED','REFUNDED') | NULL | Trạng thái thanh toán (NULL = đơn POS) |
 | shipping_address | TEXT | NULL | Địa chỉ giao hàng (snapshot), NULL cho POS |
 | shipping_latitude | DECIMAL(10,7) | NULL | |
 | shipping_longitude | DECIMAL(10,7) | NULL | |
@@ -256,31 +258,11 @@ DELIVERED → RETURN_REQUESTED → RETURN_PICKING → RETURN_SHIPPING → RETURN
 **Index:**
 - `INDEX(order_id)`
 
-### 5. payments
-
-| Column | Type | Constraints | Mô tả |
-|---|---|---|---|
-| id | CHAR(36) | PK | UUID |
-| order_id | CHAR(36) | FK → orders.id, NOT NULL | |
-| method | ENUM('CASH','TRANSFER','ONLINE') | NOT NULL | Phương thức thanh toán |
-| status | ENUM('PENDING','SUCCESS','FAILED') | NOT NULL, DEFAULT 'PENDING' | |
-| amount | DECIMAL(12,2) | NOT NULL | Số tiền thanh toán |
-| paid_at | DATETIME | NULL | Thời điểm thanh toán thành công |
-| created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
-| updated_at | DATETIME | NULL | |
-| is_deleted | BOOLEAN | NOT NULL, DEFAULT FALSE | Soft delete |
-| deleted_at | DATETIME | NULL | |
-
-**Index:**
-- `INDEX(order_id)`
-- `INDEX(status)`
-
 ### ERD
 
 ```
 carts      (1) ──── (N) cart_items
 orders     (1) ──── (N) order_items
-orders     (1) ──── (1) payments
 ```
 
 ### Redis Cache Structure
@@ -295,6 +277,73 @@ Value:  {
           "attributes": {"Dung tích": "330ml", "Hương vị": "Cola"}
         }
 TTL:    Không set (cache-aside, invalidate qua SQS)
+```
+
+---
+
+## Payment Service (MySQL)
+
+### 1. payments
+
+| Column | Type | Constraints | Mô tả |
+|---|---|---|---|
+| id | CHAR(36) | PK | UUID |
+| order_id | CHAR(36) | NOT NULL | Reference đến Order Service (không phải FK) |
+| method | ENUM('CASH','TRANSFER','ONLINE') | NOT NULL | Phương thức thanh toán |
+| status | ENUM('PENDING','SUCCESS','FAILED','REFUNDED') | NOT NULL, DEFAULT 'PENDING' | Trạng thái thanh toán |
+| amount | DECIMAL(12,2) | NOT NULL | Số tiền thanh toán |
+| gateway_transaction_id | VARCHAR(100) | NULL | Transaction ID từ payment gateway (nếu có) |
+| gateway_response | JSON | NULL | Response từ payment gateway (nếu có) |
+| paid_at | DATETIME | NULL | Thời điểm thanh toán thành công |
+| refunded_at | DATETIME | NULL | Thời điểm hoàn tiền (nếu có) |
+| created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
+| updated_at | DATETIME | NULL | |
+| is_deleted | BOOLEAN | NOT NULL, DEFAULT FALSE | Soft delete |
+| deleted_at | DATETIME | NULL | |
+
+**Index:**
+- `INDEX(order_id)`
+- `INDEX(status)`
+- `INDEX(gateway_transaction_id)`
+
+### 2. payment_transactions
+
+Lưu lịch sử giao dịch với payment gateway (cho audit và retry).
+
+| Column | Type | Constraints | Mô tả |
+|---|---|---|---|
+| id | CHAR(36) | PK | UUID |
+| payment_id | CHAR(36) | FK → payments.id, NOT NULL | |
+| transaction_type | ENUM('PAYMENT','REFUND','RETRY') | NOT NULL | Loại giao dịch |
+| gateway_transaction_id | VARCHAR(100) | NULL | Transaction ID từ payment gateway |
+| request_payload | JSON | NULL | Request gửi đến gateway |
+| response_payload | JSON | NULL | Response từ gateway |
+| status | ENUM('PENDING','SUCCESS','FAILED') | NOT NULL, DEFAULT 'PENDING' | |
+| error_message | TEXT | NULL | Lỗi nếu thất bại |
+| created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
+
+**Index:**
+- `INDEX(payment_id)`
+- `INDEX(gateway_transaction_id)`
+- `INDEX(status)`
+
+### ERD
+
+```
+payments (1) ──── (N) payment_transactions
+```
+
+### Lưu ý thiết kế
+
+**Database-per-service:** Payment Service có database riêng (MySQL) để tuân thủ nguyên tắc microservices.
+
+**Cross-service reference:** `payments.order_id` là reference đến Order Service, không phải FK. Order Service lưu `payment_id` và `payment_status` để track trạng thái thanh toán.
+
+**Luồng data:**
+```
+Order Service → order-confirmed-queue → Payment Service
+Payment Service → lưu vào Payment DB → payment-queue → Order Service
+Order Service → update payment_status + payment_id
 ```
 
 ---

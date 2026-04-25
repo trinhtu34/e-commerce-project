@@ -3,6 +3,7 @@
 > Tài liệu tổng hợp các vấn đề cần xem lại và cải thiện.
 >
 > Review lần 3: 23/04/2026 — Deep review toàn bộ BA_Document.md, Technical_Architect.md, Database_Schema.md.
+> Review lần 4: 25/04/2026 — Giải quyết issue 3.1: Tách payments ra Payment Service DB.
 
 ---
 
@@ -204,14 +205,14 @@ ScyllaDB hỗ trợ paging qua driver, nhưng tài liệu chưa đề cập pagi
 
 ## 3. Vấn đề thiết kế cũ còn tồn đọng
 
-### 3.1 Bảng `payments` vi phạm database-per-service
+### 3.1 ~~Bảng `payments` vi phạm database-per-service~~ ✅ ĐÃ SỬA
 
-**Trạng thái:** BA mục 10 ghi nhận là "Technical Debt có kế hoạch".
-
-**Còn lại:** Technical_Architect.md mục 2 ghi Payment Service database = `-` mà không có note.
-
-**Hành động:**
-- [ ] Thêm note vào Technical_Architect.md mục 2
+> Database_Schema.md đã cập nhật:
+> - Tách payments ra Payment Service DB (MySQL)
+> - Thêm bảng `payments` và `payment_transactions` vào Payment Service
+> - Cập nhật Order Service DB: thêm `payment_id` và `payment_status` vào bảng `orders`
+> - Technical_Architect.md mục 2 đã cập nhật: Payment Service database = MySQL
+> - BA_Document.md đã xóa note technical debt
 
 ---
 
@@ -337,6 +338,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 | ✅ | Thiếu DLQ | BA mục 10 → maxReceiveCount: 3 |
 | ✅ | Thiếu API versioning | BA mục 10 → URL versioning /api/v1/ |
 | ✅ | POS offline | BA mục 10 → yêu cầu internet, offline out of scope |
+| ✅ | Bảng payments vi phạm database-per-service | Database_Schema.md → tách ra Payment Service DB, Technical_Architect.md → Payment Service database = MySQL |
 
 ---
 
@@ -346,7 +348,7 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 |---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | ✅ Đã sửa 6/6 |
 | **Thiết kế mới** | 10 | Review và quyết định từng issue |
-| **Thiết kế cũ tồn đọng** | 2 | Bổ sung note + chi tiết |
+| **Thiết kế cũ tồn đọng** | 2 | ✅ Đã sửa 1/2 |
 | **Thiếu sót tài liệu** | 5 | Bổ sung vào Technical_Architect.md |
 | **Gợi ý cải thiện** | 6 | Nice to have, làm sau |
 
@@ -357,9 +359,11 @@ BA ghi *"Hỗ trợ tìm kiếm và lọc sản phẩm theo danh mục, giá"* n
 3. ~~**Define analytics aggregation trigger** (mục 2.9)~~ ✅ ĐÃ SỬA
 4. ~~**Define checkout khi thiếu hàng** (mục 2.1)~~ ✅ ĐÃ SỬA
 5. ~~**Define hoàn hàng business rules** (mục 2.3)~~ ✅ ĐÃ SỬA
+6. ~~**Tách payments ra Payment Service DB** (mục 3.1)~~ ✅ ĐÃ SỬA
 
 ---
 
 *Review lần 1: 23/04/2026*
 *Cross-check lần 2: 23/04/2026*
 *Deep review lần 3: 23/04/2026*
+*Review lần 4: 25/04/2026*

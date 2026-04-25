@@ -257,12 +257,6 @@ IF quantity >= N;
 4. Thất bại → update status: FAILED
 ```
 
-### Technical Debt có kế hoạch
-
-- Bảng `payments` hiện nằm trong Order Service DB (giai đoạn mock)
-- Khi tích hợp payment gateway thật → tách ra **Payment Service** với DB riêng
-- Order Service chỉ lưu `payment_status` + `payment_id` (reference)
-
 ### POS Connectivity
 
 - POS yêu cầu **kết nối internet** để hoạt động

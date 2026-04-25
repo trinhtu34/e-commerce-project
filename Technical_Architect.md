@@ -51,7 +51,7 @@
 | Product Service           | Web API | MySQL         | Quản lý sản phẩm, danh mục 3 cấp, variant + SKU, giá (product level + variant level), lịch sử giá |
 | Store & Inventory Service | Web API | ScyllaDB      | Quản lý cửa hàng, kho tổng, tồn kho theo từng cửa hàng, nhập hàng từ kho tổng                     |
 | Order Service             | Web API | MySQL + Redis | Tạo và quản lý đơn hàng (online + POS), giỏ hàng, cache product, auto-cancel                      |
-| Payment Service           | Worker  | -             | Consume queue, xử lý thanh toán (mock)                                                            |
+| Payment Service           | Worker  | MySQL         | Consume queue, xử lý thanh toán (mock), lưu lịch sử giao dịch với payment gateway                |
 | Notification Service      | Worker  | -             | Consume queue, gửi email qua AWS SES                                                              |
 | Analytics Service         | Worker  | DynamoDB      | Consume queue, ghi nhận và tổng hợp dữ liệu bán hàng                                              |
 
