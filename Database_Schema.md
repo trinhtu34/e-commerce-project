@@ -73,6 +73,8 @@ users (1) ──── (N) store_staff
 | name | VARCHAR(100) | NOT NULL | Tên danh mục |
 | parent_id | CHAR(36) | FK → categories.id, NULL | NULL = cấp gốc |
 | path | VARCHAR(500) | NOT NULL | Materialized path, ví dụ: `/1/2/3` |
+| level | INT | NOT NULL, DEFAULT 0 | Cấp độ danh mục (0 = root, 1 = cấp 2, 2 = cấp 3, ...) |
+| is_leaf | BOOLEAN | NOT NULL, DEFAULT TRUE | Danh mục cấp lá (true = không có con, false = có con) |
 | created_at | DATETIME | NOT NULL, DEFAULT NOW() | |
 | updated_at | DATETIME | NULL | |
 | is_deleted | BOOLEAN | NOT NULL, DEFAULT FALSE | Soft delete |
@@ -81,6 +83,17 @@ users (1) ──── (N) store_staff
 **Index:**
 - `INDEX(path)` — tối ưu query `WHERE path LIKE '/1/2/%'`
 - `INDEX(parent_id)`
+- `INDEX(level)` — tối ưu query theo cấp độ
+- `INDEX(is_leaf)` — tối ưu query danh mục cấp lá
+
+**Business Rules:**
+- `level = 0`: Danh mục gốc (root), `parent_id = NULL`
+- `level = 1`: Danh mục cấp 2, `parent_id` trỏ đến level 0
+- `level = 2`: Danh mục cấp 3, `parent_id` trỏ đến level 1
+- `is_leaf = TRUE`: Danh mục cấp lá, có thể gắn sản phẩm
+- `is_leaf = FALSE`: Danh mục có con, không thể gắn sản phẩm
+- Khi thêm danh mục con → cập nhật `is_leaf = FALSE` cho danh mục cha
+- Khi xóa danh mục con (soft delete) → kiểm tra còn con nào không → nếu không còn → cập nhật `is_leaf = TRUE` cho danh mục cha
 
 ### 2. products
 

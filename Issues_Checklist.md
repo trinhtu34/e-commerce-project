@@ -11,11 +11,11 @@
 | Mức độ | Tổng | Đã giải quyết | Cần giải quyết | Nice to have |
 |---|---|---|---|---|
 | **Mâu thuẫn tài liệu** | 6 | 6 | 0 | 0 |
-| **Thiết kế mới** | 10 | 6 | 4 | 0 |
+| **Thiết kế mới** | 10 | 7 | 3 | 0 |
 | **Thiết kế cũ tồn đọng** | 2 | 2 | 0 | 0 |
 | **Thiếu sót tài liệu** | 5 | 0 | 5 | 0 |
 | **Gợi ý cải thiện** | 6 | 0 | 0 | 6 |
-| **TỔNG** | 29 | 14 | 9 | 6 |
+| **TỔNG** | 29 | 15 | 8 | 6 |
 
 ---
 
@@ -150,7 +150,7 @@ Có 4 queue nhưng chưa define message format cho bất kỳ queue nào. Develo
 
 ## 🟡 Ưu tiên trung bình (Cần giải quyết)
 
-### 2.4 Thiếu `level` hoặc `depth` column trong bảng categories
+### 2.4 ~~Thiếu `level` hoặc `depth` column trong bảng categories~~ ✅ ĐÃ GIẢI QUYẾT
 
 **File:** Database_Schema.md (Product Service — categories)
 
@@ -159,12 +159,31 @@ Bảng `categories` có `path` (materialized path) nhưng thiếu `level`/`depth
 - Query tất cả danh mục cấp 2 → phải parse path hoặc join, không có cách query trực tiếp
 - Validate sản phẩm chỉ gắn vào danh mục cấp lá → cần biết danh mục nào là lá
 
+**Giải pháp đã thực hiện:**
+- ✅ Thêm `level` column vào bảng categories (INT, NOT NULL, DEFAULT 0)
+- ✅ Thêm `is_leaf` column vào bảng categories (BOOLEAN, NOT NULL, DEFAULT TRUE)
+- ✅ Thêm index cho `level` và `is_leaf`
+- ✅ Define business rules cho level và is_leaf
+- ✅ Cập nhật BA_Document.md mục 2 với Danh mục Structure
+
+**Database_Schema.md đã cập nhật:**
+- Thêm `level` column: Cấp độ danh mục (0 = root, 1 = cấp 2, 2 = cấp 3, ...)
+- Thêm `is_leaf` column: Danh mục cấp lá (true = không có con, false = có con)
+- Thêm index: `INDEX(level)` và `INDEX(is_leaf)`
+- Business rules: Tự động tính level, cập nhật is_leaf khi thêm/xóa con
+
+**BA_Document.md đã cập nhật:**
+- Thêm section "Danh mục Structure" với đầy đủ business rules
+- Define cấp độ danh mục (level 0, 1, 2, 3+)
+- Define danh mục cấp lá (is_leaf TRUE/FALSE)
+- Business rules: Tự động tính level, cập nhật is_leaf, validate gắn sản phẩm
+
 **Hành động:**
-- [ ] Cân nhắc thêm `level` hoặc `is_leaf` vào bảng categories
+- [x] Cân nhắc thêm `level` hoặc `is_leaf` vào bảng categories ✅ ĐÃ THÊM CẢ 2
 
 **Ưu tiên:** 🟡 Trung bình
 **Phức tạp:** Thấp
-**Thời gian ước tính:** 1-2 giờ
+**Thời gian ước tính:** 1-2 giờ ✅ HOÀN THÀNH
 
 ---
 

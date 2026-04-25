@@ -61,6 +61,25 @@ Website thương mại điện tử cho một chuỗi cửa hàng bán lẻ đa 
 - Mỗi variant có **mã SKU riêng** (ví dụ: `PEPSI-330-COLA`)
 - Đơn vị tính đồng nhất: **cái** cho tất cả sản phẩm
 
+### Danh mục Structure:
+
+**Cấp độ danh mục (level):**
+- `level = 0`: Danh mục gốc (root), ví dụ: "Vật dụng", "Thực phẩm"
+- `level = 1`: Danh mục cấp 2, ví dụ: "Đồ gia dụng", "Đồ ăn"
+- `level = 2`: Danh mục cấp 3, ví dụ: "Bếp", "Phòng khách"
+- `level = 3+`: Danh mục cấp sâu hơn (nếu cần)
+
+**Danh mục cấp lá (is_leaf):**
+- `is_leaf = TRUE`: Danh mục cấp lá, có thể gắn sản phẩm
+- `is_leaf = FALSE`: Danh mục có con, không thể gắn sản phẩm
+
+**Business Rules:**
+- Khi tạo danh mục mới → tự động tính `level` dựa trên `parent_id` (level = parent.level + 1)
+- Khi tạo danh mục con → cập nhật `is_leaf = FALSE` cho danh mục cha
+- Khi xóa danh mục con (soft delete) → kiểm tra còn con nào không → nếu không còn → cập nhật `is_leaf = TRUE` cho danh mục cha
+- Validate: Chỉ cho phép gắn sản phẩm vào danh mục có `is_leaf = TRUE`
+- Query optimization: Dùng `level` để query danh mục theo cấp độ, dùng `is_leaf` để query danh mục cấp lá
+
 ### Giá sản phẩm:
 - **Giá đồng nhất toàn chuỗi**, không phân biệt cửa hàng
 - Giá có **2 level**:
